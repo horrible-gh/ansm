@@ -1,1 +1,15 @@
-/.legacy/
+# Build artifacts
+/ansm
+/ansm.exe
+*.exe
+*.test
+
+# Distribution artifacts can be regenerated with tools/dist.ps1.
+/dist/
+
+# Generated resource objects (cmd/ansm/rsrc_windows_*.syso) are committed so
+# ordinary builds need only `go build`. Intermediate resource files are ignored.
+*.res
+
+# Local Go build cache
+/.gocache/
