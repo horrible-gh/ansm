@@ -145,7 +145,7 @@ func (r *Runner) Run(command string, args []string) int {
 	var f *Form
 	var err error
 	switch strings.ToLower(command) {
-	case "install":
+	case "install", "gui":
 		name := ""
 		if len(args) > 0 {
 			name = args[0]
@@ -700,7 +700,7 @@ func newDialog(style uint32, x, y, cx, cy int16, title string) *dialogBuilder {
 	b.word(0)
 	b.utf16(title)
 	b.word(8)
-	b.utf16("MS Shell Dlg")
+	b.utf16("MS Shell Dlg 2")
 	return b
 }
 func (b *dialogBuilder) item(style, ex uint32, x, y, cx, cy int16, id uint16, class uint16, title string) {

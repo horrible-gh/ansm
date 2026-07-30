@@ -1,7 +1,9 @@
 # T9 native configuration dialogs
 
 T9 completes the management UI promised by D0006. `install` without an application,
-`edit`, and `remove` without `confirm` now open native modal Windows dialogs.
+`edit`, and `remove` without `confirm` now open native modal Windows dialogs. The `gui`
+command is a discoverable alias for the same no-argument `install` dialog, for callers
+who want to open the configuration UI without implying that a service is being installed.
 
 ## Implementation
 
@@ -24,6 +26,13 @@ pages in the original NSSM order:
 
 The Win32 dialog procedures are created once in package-level variables. Opening or
 switching dialogs never allocates another `syscall.NewCallback` slot.
+
+The embedded manifest (`internal/rsrc.DefaultManifest`) declares a Common-Controls v6
+dependency so the dialogs pick up themed controls, and a DPI awareness block
+(`dpiAware` plus `dpiAwareness` for Per-Monitor v2 with a Per-Monitor v1 fallback) so
+Windows does not bitmap-stretch the window on scaled displays. The dialog font is
+`MS Shell Dlg 2`, the modern remap target for `MS Shell Dlg`. Tab structure and field
+layout are unchanged; per-tab keyboard focus order is left for a later pass.
 
 ## Data flow
 
