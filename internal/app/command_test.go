@@ -142,6 +142,21 @@ func TestDumpStartsWithInstallAndKeepsContractOrder(t *testing.T) {
 	}
 }
 
+func TestDumpQuotesNSSMDummyPassword(t *testing.T) {
+	m := managedFake()
+	m.values[settingKey{"ObjectName", ""}] = platform.Value{Kind: settings.KindSZ, Text: `DOMAIN\svc`}
+	env, out, _ := commandEnv([]string{"ansm.exe", "dump", "MySvc"}, m)
+	if code := runNamed(t, env, "dump"); code != 0 {
+		t.Fatalf("code=%d", code)
+	}
+	want := `"C:\tools\ansm.exe" set MySvc ObjectName DOMAIN\svc "****"`
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\r\n") {
+		if line == want {
+			return
+		}
+	}
+	t.Fatalf("missing line %q in output:\n%s", want, out.String())
+}
 func TestStatusCodeReturnsServiceState(t *testing.T) {
 	m := managedFake()
 	m.cfg.State = control.Paused
@@ -185,6 +200,34 @@ func TestRemoveWithoutConfirmUsesGUI(t *testing.T) {
 	}
 }
 
+func TestShortInstallAndRemoveFormsUseGUI(t *testing.T) {
+	tests := []struct {
+		name string
+		argv []string
+	}{
+		{name: "install without arguments", argv: []string{"ansm.exe", "install"}},
+		{name: "install with service", argv: []string{"ansm.exe", "install", "MySvc"}},
+		{name: "remove without arguments", argv: []string{"ansm.exe", "remove"}},
+		{name: "remove with service", argv: []string{"ansm.exe", "remove", "MySvc"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := managedFake()
+			env, _, _ := commandEnv(tt.argv, m)
+			called := false
+			env.RunGUI = func(_ cli.Command, args []string) int {
+				called = len(args) == len(tt.argv)-2
+				return 37
+			}
+			if code := runNamed(t, env, tt.argv[1]); code != 37 {
+				t.Fatalf("code=%d", code)
+			}
+			if !called {
+				t.Fatal("GUI was not called with the short argument list")
+			}
+		})
+	}
+}
 func TestInstallDialogElevatesBeforeOpening(t *testing.T) {
 	m := managedFake()
 	env, _, _ := commandEnv([]string{"ansm.exe", "install"}, m)

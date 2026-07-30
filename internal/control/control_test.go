@@ -3,7 +3,7 @@ package control
 import "testing"
 
 func TestStateStrings(t *testing.T) {
-	// P0007 1.3: statuscode 는 이 숫자를 종료 코드로 쓴다.
+	// This section follows the documented behavioral contract. See P0007 1.3.
 	want := map[State]string{
 		1: "SERVICE_STOPPED",
 		2: "SERVICE_START_PENDING",
@@ -21,9 +21,9 @@ func TestStateStrings(t *testing.T) {
 }
 
 func TestControlNames(t *testing.T) {
-	// 훅 환경 변수 NSSM_TRIGGER / NSSM_LAST_CONTROL 에 실리는 표기.
+	// if follows the documented behavioral contract. See NSSM_TRIGGER, NSSM_LAST_CONTROL.
 	if Rotate != 128 {
-		t.Errorf("Rotate = %d, want 128 (사용자 정의 제어)", Rotate)
+		t.Errorf("Rotate = %d, want 128 (user-defined control)", Rotate)
 	}
 	if got := Rotate.Name(); got != "ROTATE" {
 		t.Errorf("Rotate.Name() = %q", got)
@@ -55,7 +55,7 @@ func TestClassify(t *testing.T) {
 		{Continue, Running, Desired},
 		{Continue, ContinuePending, Expected},
 
-		// 상태를 바꾸지 않는 제어는 항상 도달로 본다.
+		// This section follows the documented behavioral contract.
 		{Interrogate, Stopped, Desired},
 		{Rotate, Running, Desired},
 	}

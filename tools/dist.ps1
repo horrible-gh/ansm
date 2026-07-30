@@ -1,31 +1,31 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  ANSM 배포 산출물을 만든다.
+  Builds ANSM distribution artifacts.
 
 .DESCRIPTION
-  64비트와 32비트 실행 파일을 만들어 dist\win64, dist\win32 에 놓는다.
-  원본 나씀의 배포 압축 파일과 같은 배치다.
+  Builds 64-bit and 32-bit executables under dist\win64 and dist\win32,
+  matching the layout of the NSSM distribution archive.
 
-  같은 커밋에서 몇 번을 돌려도 같은 바이트가 나와야 한다. 그래서
+  Repeated runs from the same commit must produce identical bytes:
 
-    * 버전과 빌드 일자를 저장소 이력에서 뽑는다. 손목시계를 보지 않는다.
-    * -trimpath 로 빌드 기계의 경로를 지운다.
-    * -buildvcs=false 로 작업 폴더가 깨끗한지 여부가 산출물을 바꾸지 않게 한다.
-    * 리소스 오브젝트의 시각 도장은 0 이다(internal/rsrc).
+    * Version and build date come from repository history, not the wall clock.
+    * -trimpath removes build-machine paths.
+    * -buildvcs=false prevents worktree cleanliness from changing the output.
+    * Resource-object timestamps are zero (internal/rsrc).
 
-  버전 문자열은 원본 version.cmd 와 같은 규칙이다. `git describe --tags --long`
-  이 내는 "v2.24-101-g897c7ad" 에서 앞의 v 를 떼고 그대로 쓴다. 태그가 없으면
-  internal/version 의 기본값을 그대로 둔다 — 이식의 바탕이 된 원본 스냅샷 값이다.
+  Version strings follow NSSM version.cmd rules. The leading v is removed from
+  values such as "v2.24-101-g897c7ad" returned by git describe --tags --long.
+  If no tag is available, internal/version keeps the source-snapshot default.
 
 .PARAMETER Version
-  버전 문자열을 직접 정한다. 비우면 저장소 이력에서 뽑는다.
+  Explicit version string. When omitted, derive it from repository history.
 
 .PARAMETER Date
-  빌드 일자(YYYY-MM-DD)를 직접 정한다. 비우면 HEAD 커밋 날짜를 쓴다.
+  Explicit build date in YYYY-MM-DD format. When omitted, use the HEAD commit date.
 
 .PARAMETER OutDir
-  산출물을 놓을 폴더. 기본은 dist.
+  Output directory. The default is dist.
 
 .EXAMPLE
   pwsh tools\dist.ps1
@@ -63,8 +63,7 @@ try {
   if ($Date) { $ldflags += "-X", "ansm/internal/version.BuildDate=$Date" }
 
   if ($Version) {
-    # 리소스에 실리는 버전도 같아야 한다. 파일 속성 창과 `ansm version` 이
-    # 서로 다른 값을 말하면 어느 쪽이 맞는지 알 수 없다.
+    # Keep the resource version and nsm version output identical.
     $mkrsrc = @("run", "./tools/mkrsrc")
     if ($Date) { $mkrsrc += "-date", $Date }
     $mkrsrc += "-version", $Version, "-icon", "resources/nssm.ico"

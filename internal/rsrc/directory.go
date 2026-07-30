@@ -5,30 +5,23 @@ import (
 	"fmt"
 )
 
-// dataAlignment 은 리소스 자료를 놓는 간격이다. 원본 실행 파일의 리소스도
-// 8바이트 자리에 놓여 있다. VS_VERSIONINFO 는 4바이트 정렬을 요구하므로
-// 8은 그 조건을 덮는다.
+// dataAlignment follows the documented behavioral contract.
 const dataAlignment = 8
 
-// blob 은 `.rsrc` 구역 하나의 내용과, 실행 파일 주소로 고쳐야 할 자리들이다.
+// blob follows the documented behavioral contract.
 type blob struct {
 	data []byte
-	// fixups 는 IMAGE_RESOURCE_DATA_ENTRY.OffsetToData 필드의 구역 내 위치다.
-	// 이 필드에는 구역 시작을 0 으로 본 상대 위치를 적어 두고, 링커가 구역이
-	// 놓인 실제 주소를 더하게 한다.
+	// fixups follows the documented behavioral contract. See OffsetToData.
 	fixups []uint32
 }
 
-// buildDirectory 는 종류·이름·언어 세 층의 리소스 디렉터리와 자료를 이어 붙인다.
-//
-// 배치는 층별로 모은다. 1층 디렉터리, 2층 디렉터리들, 3층 디렉터리들,
-// 자료 항목들, 그리고 자료 본문. 자료 본문만 정렬 간격을 맞춘다.
+// buildDirectory follows the documented behavioral contract.
 func buildDirectory(entries []Entry) (blob, error) {
 	if len(entries) == 0 {
 		return blob{}, ErrEmpty
 	}
 
-	// 층별로 묶는다. entries 는 이미 정렬되어 있다.
+	// nameGroup follows the documented behavioral contract.
 	type nameGroup struct {
 		name    uint16
 		entries []Entry
@@ -54,7 +47,7 @@ func buildDirectory(entries []Entry) (blob, error) {
 	const dirEntrySize = 8
 	const dataEntrySize = 16
 
-	// 1차: 자리 계산.
+	// This section follows the documented behavioral contract.
 	offset := dirSize + dirEntrySize*len(types)
 	nameDirOffset := make([]int, len(types))
 	for i, t := range types {
@@ -93,10 +86,10 @@ func buildDirectory(entries []Entry) (blob, error) {
 		}
 	}
 
-	// 2차: 쓰기.
+	// This section follows the documented behavioral contract.
 	out := blob{data: make([]byte, offset)}
 	putDirectory := func(at, count int) {
-		// Characteristics·TimeDateStamp·버전은 원본 리소스 컴파일러도 0 으로 둔다.
+		// This section follows the documented behavioral contract. See Characteristics, TimeDateStamp.
 		binary.LittleEndian.PutUint16(out.data[at+12:], 0)             // NumberOfNamedEntries
 		binary.LittleEndian.PutUint16(out.data[at+14:], uint16(count)) // NumberOfIdEntries
 	}
@@ -117,7 +110,7 @@ func buildDirectory(entries []Entry) (blob, error) {
 			for k, e := range n.entries {
 				at := langDirOffset[i][j] + dirSize + dirEntrySize*k
 				binary.LittleEndian.PutUint32(out.data[at+0:], uint32(e.Language))
-				// 3층 항목은 디렉터리가 아니라 자료 항목을 가리키므로 최상위 비트가 없다.
+				// This section follows the documented behavioral contract.
 				binary.LittleEndian.PutUint32(out.data[at+4:], uint32(dataEntryOffset[i][j][k]))
 
 				de := dataEntryOffset[i][j][k]

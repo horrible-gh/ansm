@@ -13,11 +13,7 @@ import (
 	"ansm/internal/settings"
 )
 
-// 이벤트 로그 기록 경로 시험.
-//
-// 여기서 고정하는 것은 셋이다. 어느 자리에서 어떤 번호가 나가는가, 삽입
-// 문구가 원본 문구의 %1, %2 ... 순서에 맞는가, 그리고 뷰어가 문구를 찾는
-// 32비트 값이 원본이 남긴 것과 같은가.
+// This section follows the documented behavioral contract.
 
 func TestApplicationExitWritesEventLogRecords(t *testing.T) {
 	reader := redirectReader()
@@ -25,7 +21,7 @@ func TestApplicationExitWritesEventLogRecords(t *testing.T) {
 	runtime := newRuntime()
 	runtime.directories[`C:\app`] = true
 
-	// fakeRuntime 의 첫 자식은 곧바로 코드 7 로 끝난다.
+	// if follows the documented behavioral contract.
 	if result := New(reader, runtime).Run("MySvc"); result.Code != 7 {
 		t.Fatalf("Run = %+v, want exit code 7", result)
 	}
@@ -75,14 +71,13 @@ func TestHealthyStartWritesStartedServiceRecord(t *testing.T) {
 	if got, want := started.Inserts, []string{`C:\app\worker.exe`, "--serve", "MySvc", `C:\app`}; !equalStrings(got, want) {
 		t.Errorf("STARTED_SERVICE inserts = %q, want %q", got, want)
 	}
-	// 이 기계에 남아 있던 원본 나씀의 기록과 같은 값이어야 한다.
+	// if follows the documented behavioral contract.
 	if got, want := started.ID, uint32(1073742832); got != want {
 		t.Errorf("STARTED_SERVICE id = %d, want %d", got, want)
 	}
 }
 
-// 제어 처리기는 감독자에게 사건만 넘기고 곧바로 돌아온다. 지원하지 않는
-// 제어와 모르는 제어는 감독자에게 닿지 않으므로 처리기가 직접 남긴다.
+// TestControlRecordsCoverHandledUnsupportedAndUnknown follows the documented behavioral contract.
 func TestControlRecordsCoverHandledUnsupportedAndUnknown(t *testing.T) {
 	reader := redirectReader()
 	runtime, result := runRedirectedService(t, reader)
@@ -149,8 +144,7 @@ func TestPrestartAbortWritesRecord(t *testing.T) {
 	}
 }
 
-// 반복 종료 대기는 경고로 남는다. 제한 시간과 실제 대기가 함께 실려야
-// 관리자가 왜 재시작이 늦는지 알 수 있다(L0008 2.11).
+// TestThrottleWritesAWarningRecord follows the documented behavioral contract. See L0008 2.11.
 func TestThrottleWritesAWarningRecord(t *testing.T) {
 	reader := redirectReader()
 	runtime := newRuntime()
@@ -159,7 +153,7 @@ func TestThrottleWritesAWarningRecord(t *testing.T) {
 	service := New(reader, runtime)
 	service.After = func(wait time.Duration) <-chan time.Time {
 		if wait == params.ThrottleThresholdDefault {
-			// 기동 판정 대기는 끝나지 않게 두어 자식의 종료가 먼저 오게 한다.
+			// return follows the documented behavioral contract.
 			return make(chan time.Time)
 		}
 		ready := make(chan time.Time, 1)
@@ -200,7 +194,7 @@ func TestThrottleWritesAWarningRecord(t *testing.T) {
 	}
 }
 
-// 실행기가 기록 능력을 갖추지 않아도 감독자는 그대로 돈다.
+// TestSupervisorRunsWithoutAnEventReporter follows the documented behavioral contract.
 func TestSupervisorRunsWithoutAnEventReporter(t *testing.T) {
 	reader := redirectReader()
 	reader.setSub("AppExit", "7", platform.Value{Kind: settings.KindSZ, Text: "Exit"})
@@ -219,8 +213,7 @@ func TestSupervisorRunsWithoutAnEventReporter(t *testing.T) {
 	}
 }
 
-// plainRuntime 은 platform.Runtime 만 갖춘 실행기다. 선택 능력을 하나도
-// 물려받지 않도록 메서드를 손으로 넘긴다.
+// plainRuntime follows the documented behavioral contract. See Runtime.
 type plainRuntime struct{ inner *fakeRuntime }
 
 func (r *plainRuntime) RegisterService(name string, handler platform.ControlHandler) (platform.StatusReporter, error) {

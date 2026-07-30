@@ -1,145 +1,106 @@
-# T1 스파이크 결과 — 화면 구현 수단과 취소 가능한 대기
+# T1 spike results: GUI implementation and cancelable waits
 
-> 대상: D0006 [DEFERRED] "화면 구현 방법(창을 그리는 수단)", P0007 [DEFERRED] "화면 구현 방법",
-> L0008 [DEFERRED] "대기·알림 구현 수단"
-> 확인 환경: Windows 11 Pro 26100, go1.26.4 windows/amd64
-> 근거 소스: `C:\storage\flowgate\src\ANSM\main\.legacy\nssm-master`
+> Scope: the D0006 and P0007 deferred GUI mechanism, plus the L0008 deferred wait/notification mechanism
+> Verified on: Windows 11 Pro 26100, Go 1.26.4 windows/amd64
+> Reference source: `C:\storage\flowgate\src\ANSM\main\.legacy\nssm-master`
 
 ---
 
-## 1. 스파이크에서 새로 드러난 제약 — 메시지 테이블
+## 1. Newly identified constraint: message tables
 
-설계 문서가 다루지 않았으나 이식의 성립 조건에 걸리는 항목이 하나 나왔다.
+P0007 1.1 registers the event-log provider as follows:
 
-P0007 1.1 은 이벤트 로그 공급자 등록을 이렇게 정한다.
-
-```
+```text
 HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\NSSM
-  EventMessageFile = REG_SZ, 현재 실행 파일의 인용 없는 전체 경로
+  EventMessageFile = REG_SZ, unquoted full path of the current executable
 ```
 
-즉 **이벤트 뷰어는 ansm.exe 안에서 메시지 문구를 찾는다.** 원본은
-`messages.mc`(UTF-16LE, 3174줄, 영어·프랑스어·이탈리아어)를 `mc.exe` 로 컴파일해
-실행 파일에 `MESSAGETABLE` 리소스로 심는다. 이 리소스가 없으면 P0007 7.2 가 못
-박은 번호(1001–1081)로 기록은 남지만 뷰어에는
-"이벤트 ID 1008 에 대한 설명을 찾을 수 없습니다" 만 보인다.
+Event Viewer therefore looks for message text inside `ansm.exe`. NSSM compiles its UTF-16LE `messages.mc` catalog (3,174 lines in English, French, and Italian) with `mc.exe` and embeds it as a MESSAGETABLE resource. Without that resource, event codes 1001-1081 are recorded but Event Viewer cannot find their descriptions.
 
-Go 는 Windows 리소스를 스스로 만들지 못한다. 링커는 `.syso` 오브젝트만 받아들인다.
-이 기계에는 `mc.exe`, `rc.exe`, `windres`, `rsrc` 가 모두 없다(확인함).
+Go does not create Windows resources itself, and its linker accepts resource input only as `.syso` objects. The verified development machine had none of `mc.exe`, `rc.exe`, `windres`, or `rsrc` installed.
 
-| 방법 | 판단 |
+| Approach | Decision |
 |---|---|
-| MSVC/Windows SDK 의 `mc.exe` + `rc.exe` + `cvtres` | 빌드 기계에 SDK 설치를 강제한다. 이식의 동기가 "빌드 환경이 낡아 유지가 어렵다"였으므로 같은 함정에 다시 빠진다 |
-| MinGW `windres` | 외부 툴체인 의존은 위와 같고, 3개 언어 UTF-16 `.mc` 해석에서 원본과 어긋날 위험이 있다 |
-| **`.syso` 를 직접 만드는 Go 생성기** | 채택. 외부 툴체인이 없고, 번호–문구 대응을 소스에서 검증할 수 있다 |
+| Windows SDK `mc.exe` + `rc.exe` + `cvtres` | Rejected because it recreates the external SDK dependency that motivated the port |
+| MinGW `windres` | Rejected for the same toolchain dependency and for compatibility risk when parsing the three-language UTF-16 catalog |
+| A Go generator that writes `.syso` directly | Adopted; it requires no external toolchain and allows source-level verification of code-to-message mappings |
 
-**결정:** `tools/mkrsrc` 를 두어 `messages.mc` 를 읽고 `MESSAGETABLE` · `ICON` ·
-`VERSIONINFO` 를 담은 `.syso` 를 만든다. 산출물은 저장소에 함께 넣어 평소 빌드가
-`go build` 하나로 끝나게 한다.
+Decision: `tools/mkrsrc` reads `messages.mc` and writes `.syso` objects containing MESSAGETABLE, ICON, and VERSIONINFO resources. Generated objects are committed so ordinary builds need only `go build`.
 
-**착수 시점:** T8(패키징). 32비트 지원 여부와 배포 형태가 같은 산출물을 건드리므로
-한 단계에서 함께 처리하는 쪽이 낫다. 그때까지 이벤트 기록은 번호로만 남는다.
-**T3(저장소) 착수 시 이 사실을 시험 항목에 명시한다** — 이벤트가 안 보이는 것이
-버그가 아니라 아직 안 붙은 것임을 구분해야 하기 때문이다.
+This work was scheduled for T8 because resource generation, 32-bit support, and packaging all affect the same artifacts. Before T8, tests had to distinguish an intentionally absent message resource from an event-recording defect.
 
 ---
 
-## 2. 화면 구현 수단
+## 2. GUI implementation mechanism
 
-### 2.1 요구 조건
+### 2.1 Requirements
 
-D0006 6.3 이 화면에 건 조건은 셋이다.
+D0006 6.3 imposes three constraints:
 
-1. 화면은 설정 항목 목록을 그대로 비춘다 — 화면 전용 설정을 만들지 않는다.
-2. 화면은 값을 읽고 쓰기만 하고 판단은 하지 않는다.
-3. **탭 구성과 항목 배치는 원본과 같은 순서를 유지한다.**
+1. The GUI reflects the existing setting catalog and does not introduce UI-only settings.
+2. The GUI reads and writes values but does not own policy decisions.
+3. Tab structure and field order remain compatible with NSSM.
 
-3번이 수단 선택을 좁힌다. 원본의 11개 탭(`nssm.rc` 712줄)은 Win32 대화상자
-템플릿이며, 사용자가 위치를 다시 찾지 않아도 되려면 같은 배치가 나와야 한다.
+The third constraint is decisive. NSSM defines eleven tabs in fixed Win32 dialog templates, and preserving their layout prevents users from having to relearn field locations.
 
-### 2.2 후보 비교
+### 2.2 Candidate comparison
 
-| 후보 | cgo | 배포 | 원본 배치 재현 | 판단 |
+| Candidate | cgo | Packaging | NSSM layout fidelity | Decision |
 |---|---|---|---|---|
-| Win32 대화상자 직접 호출 (`syscall` + user32/comctl32) | 불필요 | 단일 exe | 그대로 | **채택** |
-| `lxn/walk` | 불필요 | 단일 exe + 매니페스트 | 레이아웃 모델이 달라 배치가 어긋남 | 탈락 |
-| Fyne | 필요 | 단일 exe(대용량) | 전혀 다른 겉모습 | 탈락 |
-| Wails / webview | 필요 | 런타임 의존 | 전혀 다름 | 탈락 |
+| Direct Win32 dialogs through `syscall`, user32, and comctl32 | No | Single executable | Exact | Adopted |
+| `lxn/walk` | No | Single executable plus manifest | Different layout model | Rejected |
+| Fyne | Yes | Large single executable | Completely different appearance | Rejected |
+| Wails or webview | Yes | Runtime dependency | Completely different appearance | Rejected |
 
-`lxn/walk` 는 성숙하지만 자체 레이아웃 관리자를 강제한다. 원본이 픽셀 좌표로
-고정해 둔 배치를 재현하려면 결국 관리자를 우회해야 하므로, 우회할 바에는
-아래 계층을 직접 다루는 쪽이 코드가 줄어든다.
+Although `lxn/walk` is mature, reproducing NSSM's fixed pixel layout would require bypassing its layout manager. Calling the underlying Win32 layer directly is simpler in that case.
 
-### 2.3 채택안의 세부
+### 2.3 Adopted design
 
-- 대화상자 템플릿은 **RC 컴파일 결과가 아니라 메모리에서 조립해**
-  `DialogBoxIndirectParam` 으로 띄운다. 1장의 `.syso` 생성기를 화면의 임계 경로에서
-  떼어 놓기 위해서다. `DLGTEMPLATE` + `DLGITEMTEMPLATE` 는 고정 구조라
-  Go 구조체로 그대로 옮길 수 있다.
-- 탭은 `SysTabControl32`, 각 탭 내용은 자식 대화상자다. 원본과 같은 구조다.
-- 창 관련 호출은 전부 `internal/platform` 뒤에 둔다. 화면이 붙지 않은 단계에서도
-  나머지가 컴파일되고 시험되어야 하기 때문이다(현재 골격이 그렇게 되어 있다).
-- 화면 코드는 `//go:build windows` 로 묶는다.
+- Dialog templates are assembled in memory and passed to `DialogBoxIndirectParam`; they are not compiled from RC files. `DLGTEMPLATE` and `DLGITEMTEMPLATE` have fixed layouts that map directly to Go structures.
+- Tabs use `SysTabControl32`, with a child dialog for each tab, matching NSSM's structure.
+- All window operations remain behind `internal/platform` so non-GUI stages continue to compile and test independently.
+- Windows UI files use `//go:build windows`.
 
-**확인한 위험:** `DialogBoxIndirectParam` 의 콜백은 `syscall.NewCallback` 으로
-만든다. Go 런타임은 콜백 하나당 슬롯을 잡고 **되돌려주지 않는다.** 창을 여닫을
-때마다 새로 만들면 슬롯이 샌다. 따라서 **콜백은 패키지 수준에서 한 번만 만들어
-재사용한다.** 이번 골격의 `ConnectServiceDispatcher` 도 같은 이유로 프로세스
-수명 동안 한 번만 부르는 자리에 두었다.
+`DialogBoxIndirectParam` callbacks are created with `syscall.NewCallback`. The Go runtime reserves a callback slot and never releases it, so creating one every time a dialog opens would leak slots. Callbacks are therefore created once at package scope and reused. `ConnectServiceDispatcher` follows the same process-lifetime rule.
 
-**착수 시점:** T9(화면). D0006 부록이 T/TR 9쌍으로 잡은 마지막 쌍이다.
+Implementation was scheduled for T9, the final T/TR pair in the D0006 appendix.
 
 ---
 
-## 3. 취소 가능한 대기와 알림
+## 3. Cancelable waits and notifications
 
-L0008 [DEFERRED] 가 "언어 기능 선택의 문제"로 T2 에 넘긴 항목이다.
+L0008 2.17 requires `await_handle` to do three things at once:
 
-### 3.1 무엇을 만족해야 하는가
+1. Wait for a kernel object such as a child or hook process.
+2. Wake at intervals of at most 20,000 ms to report status.
+3. Return immediately when a stop control cancels the remaining wait.
 
-L0008 2.17 이 정한 `await_handle` 은 세 가지를 동시에 해야 한다.
+The adopted shape is:
 
-1. 커널 개체(자식 프로세스, 훅 프로세스)가 신호될 때까지 기다린다.
-2. 최대 20000ms 씩 잘라 기다리며 그때마다 상태를 보고한다.
-3. 중지 제어가 오면 남은 대기를 즉시 접는다(L0008 5.6).
-
-### 3.2 채택안
-
-```
-ctx, cancel := context.WithCancel(...)      // 중지 제어가 cancel 을 부른다
-signalled := make(chan struct{})            // 커널 개체 감시 고루틴이 닫는다
+```go
+ctx, cancel := context.WithCancel(...) // the stop control calls cancel
+signalled := make(chan struct{})       // the kernel-object watcher closes it
 ```
 
-- 커널 개체 감시는 **고루틴 하나가 `WaitForSingleObject(h, INFINITE)` 를 물고 있다가
-  채널을 닫는 방식**을 쓴다. Go 는 블로킹 시스템 호출을 하는 고루틴을 별도 OS
-  스레드로 떼어내므로 스케줄러가 막히지 않는다. 감시 대상 하나당 스레드 하나이며,
-  ANSM 이 동시에 지켜보는 개체는 자식 하나와 훅 몇 개뿐이라 부담이 없다.
-- 잘라 기다리기는 `select { case <-signalled: ; case <-ctx.Done(): ; case <-timer.C: }`
-  로 구현한다. `timer.C` 가 20000ms 구간이고, 구간마다 진행 표시를 1 올리고
-  예상 시간을 **누적해** 늘린다(L0008 2.17: 매번 새로 설정하지 않는다).
-- **`time.Sleep` 은 쓰지 않는다.** 잘 수 없게 되는 순간이 이 도구의 요구사항이다.
-- 반복 종료 대기(L0008 2.11)도 같은 `select` 를 쓴다. `CONTINUE` 제어는
-  별도 채널로 들어와 대기를 즉시 끝내고 반복 횟수를 0 으로 되돌린다.
+A watcher goroutine blocks in `WaitForSingleObject(h, INFINITE)` and closes `signalled`. Go detaches a goroutine blocked in a system call onto an OS thread, so it does not block the scheduler. ANSM watches only one child and a small number of hooks at once, making one watcher thread per handle acceptable.
 
-### 3.3 감독자에게 사건을 전달하는 통로
+The caller selects among `signalled`, `ctx.Done()`, and a timer. Every 20-second timer interval increments progress and extends the estimated completion time cumulatively, as required by L0008 2.17. `time.Sleep` is deliberately not used because it cannot be interrupted. Repeated-exit throttling uses the same selectable wait; a CONTINUE control wakes it immediately and resets the repetition counter.
 
-D0006 1.1 이 "상태를 고칠 수 있는 곳을 감독자 한 곳으로 몬다"고 정했다.
-Go 로는 사건 채널 하나와 그 채널만 읽는 고루틴 하나가 그 구조다.
+### Supervisor event path
 
-- 제어 흐름(SCM 핸들러)과 감시 흐름은 **채널에 알림만 넣는다.** 상태는 감독자만 고친다.
-- **채널 용량은 L0008 [DEFERRED] 가 T4(기동)로 미룬 항목이다.** 여기서 정하지 않는다.
-  다만 방향은 정해 둔다: SCM 제어 핸들러는 막히면 안 되므로, 용량이 찼을 때
-  **버리지 말고 별도 고루틴으로 넘겨 넣는다.** 사건 유실은 재시작 판단을 뒤집는다.
-- 재시작 허용 표시(L0008 3.4)는 감독자 바깥에서도 읽어야 하므로 `atomic.Bool` 로 둔다.
-  제어 수신 즉시, 훅보다 **먼저** 끈다.
+D0006 1.1 requires all mutable service state to be owned by the supervisor. In Go, one event channel and one goroutine that exclusively receives from it provide that ownership model.
+
+- SCM control handlers and watchers only enqueue notifications; the supervisor alone mutates state.
+- Channel capacity was intentionally deferred to T4 for measurement. An SCM handler must never block, so a full channel must be handed to a helper goroutine rather than dropping the event. Losing an event could reverse a restart decision.
+- Restart permission must be read outside the supervisor, so it uses `atomic.Bool`. A stop control clears it immediately, before running hooks.
 
 ---
 
-## 4. 이번 단계에서 확정하지 않은 것
+## 4. Items deferred by this spike
 
-| 항목 | 이유 | 시점 |
+| Item | Reason | Scheduled stage |
 |---|---|---|
-| `.syso` 생성기 구현 | 32비트 지원 여부와 산출물이 얽힘 | T8 |
-| 사건 채널 용량 | 실측이 필요하다 | T4 |
-| 대화상자 템플릿의 실제 좌표 | 원본 `nssm.rc` 를 옮기는 기계적 작업 | T9 |
-| `NSSM_VERSION` · `NSSM_BUILD_DATE` 실제 값 | 원 저장소 이력이 없어 확정 불가 | T8 |
+| `.syso` generator implementation | Coupled to 32-bit support and packaging | T8 |
+| Supervisor event-channel capacity | Required measurement | T4 |
+| Exact dialog-template coordinates | Mechanical transfer from `nssm.rc` | T9 |
+| Actual `NSSM_VERSION` and `NSSM_BUILD_DATE` values | Original repository history was unavailable | T8 |

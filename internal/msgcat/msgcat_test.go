@@ -69,7 +69,7 @@ func TestParseReadsLanguagesAndMessages(t *testing.T) {
 	}
 }
 
-// 빈 MessageId 는 바로 다음 번호, "+n" 은 n 만큼 건너뛴 번호다.
+// TestMessageIdCountsOnFromThePreviousMessage follows the documented behavioral contract. See MessageId.
 func TestMessageIdCountsOnFromThePreviousMessage(t *testing.T) {
 	c := parse(t, sample)
 
@@ -80,8 +80,7 @@ func TestMessageIdCountsOnFromThePreviousMessage(t *testing.T) {
 	}
 }
 
-// Severity 는 다음 메시지로 이어진다. THIRD 는 Severity 줄이 없으므로
-// SECOND 의 Error 를 물려받는다.
+// TestSeverityCarriesToLaterMessages follows the documented behavioral contract. See Severity, THIRD, SECOND, Error.
 func TestSeverityCarriesToLaterMessages(t *testing.T) {
 	c := parse(t, sample)
 
@@ -105,8 +104,7 @@ func TestIDCarriesSeverityInTheTopTwoBits(t *testing.T) {
 	}
 }
 
-// 여러 줄 문구는 이벤트 로그가 기대하는 CRLF 로 이어 붙는다. 저장소 사본의
-// 줄끝이 LF 여도 마찬가지다.
+// TestMultipleLinesJoinWithCRLF follows the documented behavioral contract. See CRLF, LF.
 func TestMultipleLinesJoinWithCRLF(t *testing.T) {
 	c := parse(t, sample)
 
@@ -131,8 +129,7 @@ func TestParseAcceptsUTF16WithBOM(t *testing.T) {
 	}
 }
 
-// 모르는 지시자를 조용히 넘기면 문구가 빠진 리소스가 만들어진다. 그 사실은
-// 이벤트 뷰어에서야 드러나므로 여기서 멈춘다.
+// TestUnknownDirectiveIsRejected follows the documented behavioral contract.
 func TestUnknownDirectiveIsRejected(t *testing.T) {
 	_, err := msgcat.Parse(strings.NewReader(strings.Replace(sample,
 		"MessageId = 501", "OutputBase = 16\nMessageId = 501", 1)))
@@ -156,8 +153,7 @@ func TestUnterminatedTextIsRejected(t *testing.T) {
 	}
 }
 
-// 저장소에 넣은 실제 목록이다. 이 파일이 리소스의 원본이므로 갈아엎어지면
-// 이벤트 문구가 통째로 바뀐다.
+// TestVendoredCatalogue follows the documented behavioral contract.
 func TestVendoredCatalogue(t *testing.T) {
 	c, err := msgcat.ParseFile(filepath.Join("..", "..", "resources", "messages.mc"))
 	if err != nil {
@@ -171,7 +167,7 @@ func TestVendoredCatalogue(t *testing.T) {
 		t.Errorf("messages = %d, want 205", len(c.Messages))
 	}
 
-	// 원본 나씀 실행 파일에서 읽어 확인한 문구다.
+	// This section follows the documented behavioral contract.
 	started, ok := c.Lookup(1008)
 	if !ok {
 		t.Fatal("message 1008 is missing")

@@ -19,7 +19,7 @@ func TestBuild(t *testing.T) {
 }
 
 func TestBuildKeepsTrailingSpaceWithNoFlags(t *testing.T) {
-	// 원본과 동일하게 실행 파일 뒤의 공백 하나는 남는다.
+	// This section follows the documented behavioral contract.
 	got, err := Build(`C:\app\worker.exe`, "")
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -30,7 +30,7 @@ func TestBuildKeepsTrailingSpaceWithNoFlags(t *testing.T) {
 }
 
 func TestBuildRejectsTooLongWithoutTruncating(t *testing.T) {
-	// L0008 5.2: 잘라내지 않는다. 조립 실패로 보고 서비스 시작을 접는다.
+	// This section follows the documented behavioral contract. See L0008 5.2.
 	flags := strings.Repeat("x", params.CmdMax)
 	got, err := Build(`C:\a.exe`, flags)
 	if err != ErrTooLong {
@@ -51,9 +51,9 @@ func TestJoinFlags(t *testing.T) {
 func TestStripBasename(t *testing.T) {
 	tests := map[string]string{
 		`C:\app\worker.exe`: `C:\app`,
-		`C:\worker.exe`:     `C:\`,    // "X:" 로 끝나면 구분자 하나를 남긴다
-		`C:/app/worker.exe`: `C:/app`, // 슬래시도 구분자로 본다
-		`worker.exe`:        ``,       // 구분자가 없으면 빈 문자열
+		`C:\worker.exe`:     `C:\`,    // Follows the documented contract.
+		`C:/app/worker.exe`: `C:/app`, // Follows the documented contract.
+		`worker.exe`:        ``,       // Follows the documented contract.
 	}
 	for in, want := range tests {
 		if got := StripBasename(in); got != want {

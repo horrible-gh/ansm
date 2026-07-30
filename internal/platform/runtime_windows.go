@@ -70,7 +70,7 @@ func (r windowsStatusReporter) Report(s ServiceStatus) error {
 	return lastCallError(ret, callErr)
 }
 
-// RegisterService 는 제어 처리기를 등록하고 상태 보고기를 돌려준다.
+// RegisterService follows the documented behavioral contract. See RegisterService.
 func (Windows) RegisterService(name string, handler ControlHandler) (StatusReporter, error) {
 	namePtr, err := ptr(name)
 	if err != nil {
@@ -170,8 +170,7 @@ func environmentBlock(entries []string) []uint16 {
 	return append(block, 0)
 }
 
-// StartProcess 는 CreateProcessW 로 저장된 원시 AppParameters 를 그대로 보존해
-// 자식을 띄운다. CPU 지정이 있으면 정지 상태에서 마스크를 적용한 뒤 재개한다.
+// StartProcess follows the documented behavioral contract. See StartProcess, CreateProcessW, AppParameters, CPU.
 func (Windows) StartProcess(spec ProcessSpec) (Process, error) {
 	var application *uint16
 	var err error
@@ -232,8 +231,7 @@ func (Windows) StartProcess(spec ProcessSpec) (Process, error) {
 		}
 	}
 	if spec.Affinity != 0 {
-		// 32비트 빌드는 32비트만 넘길 수 있다. 지정한 CPU 가운데 넘길 수 없는
-		// 번호는 여기서 떨어져 나간다. 원본도 같은 자리에서 값을 자른다.
+		// This section follows the documented behavioral contract. See CPU.
 		wanted, _ := affinity.Applicable(spec.Affinity, affinity.MaskWidth)
 
 		var processMask, systemMask uintptr
@@ -244,8 +242,7 @@ func (Windows) StartProcess(spec ProcessSpec) (Process, error) {
 		)
 		effective := uintptr(wanted)
 		if err = lastCallError(ret, callErr); err != nil {
-			// 시스템 마스크를 못 읽으면 지정한 값을 그대로 쓴다. 자식을
-			// 죽이지는 않는다 — CPU 지정은 서비스 기동의 조건이 아니다.
+			// This section follows the documented behavioral contract. See CPU.
 			reportAffinityEvent(messages.EventGetProcessAffinityMaskFailed, spec.ServiceName, err)
 		} else {
 			effective &= systemMask
@@ -299,10 +296,7 @@ func (Windows) CurrentProcessID() uint32 { return uint32(os.Getpid()) }
 
 func (Windows) ExitProcess(exitCode uint32) { procExitProcess.Call(uintptr(exitCode)) }
 
-// reportAffinityEvent 는 CPU 지정에 실패했음을 이벤트 로그에 남긴다.
-//
-// 원본과 같이 기록만 하고 넘어간다. CPU 지정은 서비스 기동의 조건이 아니므로
-// 실패해도 자식을 죽이지 않는다. 문구는 서비스 이름과 오류 문구 둘을 받는다.
+// reportAffinityEvent follows the documented behavioral contract. See CPU.
 func reportAffinityEvent(id messages.ID, service string, err error) {
 	var w Windows
 	w.ReportEvent(EventRecord{

@@ -16,8 +16,7 @@ func TestAllIsEightCombinations(t *testing.T) {
 }
 
 func TestDeadlinesAndAbort(t *testing.T) {
-	// Start/Pre 만 동기이면서 중단을 요청할 수 있다.
-	// Stop/Pre 만 20000ms 를 쓴다.
+	// for follows the documented behavioral contract. See Start, Pre, Stop.
 	for _, h := range All() {
 		switch h.Name() {
 		case "Start/Pre":
@@ -44,7 +43,7 @@ func TestDeadlinesAndAbort(t *testing.T) {
 }
 
 func TestEventsAreSorted(t *testing.T) {
-	// P0007 3.10 의 "Invalid hook event!" 안내 순서.
+	// This section follows the documented behavioral contract. See P0007 3.10, Invalid.
 	want := []string{"Exit", "Power", "Rotate", "Start", "Stop"}
 	if got := Events(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Events() = %v, want %v", got, want)
@@ -60,14 +59,14 @@ func TestParseName(t *testing.T) {
 		t.Errorf("Name() = %q, want Start/Pre", h.Name())
 	}
 
-	// 세 가지 오류를 구분해야 서로 다른 안내 문구가 나간다.
+	// if follows the documented behavioral contract.
 	if _, err := ParseName("StartPre"); err != ErrName {
 		t.Errorf("ParseName(StartPre) = %v, want ErrName", err)
 	}
 	if _, err := ParseName("Reboot/Pre"); err != ErrEvent {
 		t.Errorf("ParseName(Reboot/Pre) = %v, want ErrEvent", err)
 	}
-	// Stop 에는 Post 가 없다.
+	// if follows the documented behavioral contract. See Stop, Post.
 	if _, err := ParseName("Stop/Post"); err != ErrAction {
 		t.Errorf("ParseName(Stop/Post) = %v, want ErrAction", err)
 	}
@@ -86,7 +85,7 @@ func TestActionsFor(t *testing.T) {
 }
 
 func TestClassify(t *testing.T) {
-	// 제한 시간 초과는 종료 코드를 보지 않는다.
+	// if follows the documented behavioral contract.
 	if got := Classify(true, 0); got != StatusTimeout {
 		t.Errorf("Classify(timeout) = %d, want %d", got, StatusTimeout)
 	}
@@ -102,7 +101,7 @@ func TestClassify(t *testing.T) {
 }
 
 func TestSyncWaitLimit(t *testing.T) {
-	// 동기 훅의 실제 대기 상한은 제한 시간 + 20000ms 다.
+	// if follows the documented behavioral contract.
 	if got := SyncWaitLimit(params.HookDeadlineStopPre); got != params.HookDeadlineStopPre+params.StatusReportInterval {
 		t.Errorf("SyncWaitLimit = %v", got)
 	}

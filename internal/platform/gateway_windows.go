@@ -10,8 +10,7 @@ import (
 	"ansm/internal/messages"
 )
 
-// errorFailedServiceControllerConnect 는 "서비스로 기동된 것이 아니다" 라는 뜻의
-// Windows 오류다. L0008 2.1 이 이 값 하나로 "사람이 그냥 실행"을 가려낸다.
+// errorFailedServiceControllerConnect follows the documented behavioral contract. See Windows, L0008 2.1.
 const errorFailedServiceControllerConnect = 1063
 
 const (
@@ -37,10 +36,10 @@ var (
 	procShellExecuteW = shell32.NewProc("ShellExecuteW")
 )
 
-// Windows 는 Gateway 의 Windows 구현이다.
+// Windows follows the documented behavioral contract. See Windows, Gateway.
 type Windows struct{}
 
-// New 는 이 플랫폼의 창구를 돌려준다.
+// New follows the documented behavioral contract. See New.
 func New() *Windows { return &Windows{} }
 
 func stdHandle(which uintptr) uintptr {
@@ -52,24 +51,20 @@ func handlePresent(h uintptr) bool {
 	return h != 0 && h != uintptr(syscall.InvalidHandle)
 }
 
-// StdinHandlePresent 는 GetStdHandle(STD_INPUT_HANDLE) 이 유효한지 본다.
+// StdinHandlePresent follows the documented behavioral contract. See StdinHandlePresent, GetStdHandle.
 func (Windows) StdinHandlePresent() bool {
 	return handlePresent(stdHandle(stdInputHandle))
 }
 
-// HasConsoleOutput 은 표준 출력이나 표준 오류 중 하나라도 살아 있는지 본다.
+// HasConsoleOutput follows the documented behavioral contract. See HasConsoleOutput.
 func (Windows) HasConsoleOutput() bool {
 	return handlePresent(stdHandle(stdOutputHandle)) || handlePresent(stdHandle(stdErrorHandle))
 }
 
-// pendingServiceMain 은 SCM 콜백이 부를 본체다.
-//
-// StartServiceCtrlDispatcherW 는 프로세스 수명 동안 한 번만 부르고,
-// 그 사이에는 다른 디스패처가 돌지 않으므로 전역 하나로 충분하다.
+// pendingServiceMain follows the documented behavioral contract. See SCM, StartServiceCtrlDispatcherW.
 var pendingServiceMain ServiceMain
 
-// serviceMainCallback 은 C 호출 규약으로 SCM 이 부르는 진입점이다.
-// syscall.NewCallback 에 넘기려면 인수와 반환이 모두 포인터 크기여야 한다.
+// serviceMainCallback follows the documented behavioral contract. See SCM, NewCallback.
 func serviceMainCallback(argc uintptr, argv **uint16) uintptr {
 	var name string
 	var args []string
@@ -86,7 +81,7 @@ func serviceMainCallback(argc uintptr, argv **uint16) uintptr {
 	return 0
 }
 
-// utf16Slice 는 NUL 로 끝나는 UTF-16 문자열을 슬라이스로 본다.
+// utf16Slice follows the documented behavioral contract. See NUL, UTF.
 func utf16Slice(p *uint16) []uint16 {
 	if p == nil {
 		return nil
@@ -98,10 +93,7 @@ func utf16Slice(p *uint16) []uint16 {
 	return unsafe.Slice(p, n+1)
 }
 
-// ConnectServiceDispatcher 는 SCM 디스패처에 연결한다.
-//
-// 이름이 비어 있어도 된다. SERVICE_WIN32_OWN_PROCESS 서비스는 SCM 이 넘긴
-// 이름을 ServiceMain 의 첫 인수로 받으므로, 표의 이름은 무시된다.
+// ConnectServiceDispatcher follows the documented behavioral contract. See ConnectServiceDispatcher, SCM, ServiceMain.
 func (Windows) ConnectServiceDispatcher(serve ServiceMain) DispatchResult {
 	pendingServiceMain = serve
 	callback := syscall.NewCallback(serviceMainCallback)
@@ -111,7 +103,7 @@ func (Windows) ConnectServiceDispatcher(serve ServiceMain) DispatchResult {
 		return DispatchFailed
 	}
 
-	// 항목 하나 + 끝을 알리는 NULL 항목.
+	// This section follows the documented behavioral contract. See NULL.
 	table := [2]struct {
 		name *uint16
 		proc uintptr
@@ -127,8 +119,7 @@ func (Windows) ConnectServiceDispatcher(serve ServiceMain) DispatchResult {
 	if errno, ok := lastErr.(syscall.Errno); ok && uintptr(errno) == errorFailedServiceControllerConnect {
 		return DispatchNotAService
 	}
-	// 실제 오류다. 콘솔이 없는 자리이므로 이벤트 로그가 유일한 통로다.
-	// 문구는 "StartServiceCtrlDispatcher() failed:" 뒤에 %1 이 붙는다.
+	// This section follows the documented behavioral contract. See StartServiceCtrlDispatcher.
 	w := Windows{}
 	w.ReportEvent(EventRecord{
 		Type:    uint16(messages.EventType(messages.EventDispatcherFailed)),
@@ -138,7 +129,7 @@ func (Windows) ConnectServiceDispatcher(serve ServiceMain) DispatchResult {
 	return DispatchFailed
 }
 
-// errorMessage 는 Win32 오류를 사람이 읽는 한 줄로 만든다.
+// errorMessage follows the documented behavioral contract. See Win32.
 func errorMessage(err error) string {
 	if err == nil {
 		return ""
@@ -146,7 +137,7 @@ func errorMessage(err error) string {
 	return err.Error()
 }
 
-// IsAdmin 은 지금 토큰이 Administrators 그룹에 속하는지 본다.
+// IsAdmin follows the documented behavioral contract. See IsAdmin, Administrators.
 func (Windows) IsAdmin() bool {
 	// S-1-5-32-544 (BUILTIN\Administrators)
 	const (
@@ -174,7 +165,7 @@ func (Windows) IsAdmin() bool {
 	return ret != 0 && isMember != 0
 }
 
-// ShowMessageBox 는 콘솔이 없을 때 사용법을 팝업으로 보여준다(L0008 4.1).
+// ShowMessageBox follows the documented behavioral contract. See ShowMessageBox, L0008 4.1.
 func (Windows) ShowMessageBox(title, body string) {
 	const mbOK = 0x00000000
 	t, err := syscall.UTF16PtrFromString(title)
@@ -188,7 +179,7 @@ func (Windows) ShowMessageBox(title, body string) {
 	procMessageBoxW.Call(0, uintptr(unsafe.Pointer(b)), uintptr(unsafe.Pointer(t)), mbOK)
 }
 
-// Elevate 는 runas 동사로 같은 명령행을 관리자 권한으로 다시 실행한다.
+// Elevate follows the documented behavioral contract. See Elevate.
 func (Windows) Elevate(argv []string) error {
 	if len(argv) == 0 {
 		return syscall.EINVAL

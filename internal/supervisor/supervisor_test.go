@@ -166,8 +166,7 @@ type fakeRuntime struct {
 	mu           sync.Mutex
 }
 
-// ReportEvent 는 platform.EventReporter 를 흉내 낸다. 실제 Windows 실행기와
-// 같은 자리에서 불리므로, 이 기록이 곧 이벤트 로그에 남을 항목이다.
+// ReportEvent follows the documented behavioral contract. See ReportEvent, EventReporter, Windows.
 func (r *fakeRuntime) ReportEvent(record platform.EventRecord) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -180,7 +179,7 @@ func (r *fakeRuntime) recordedEvents() []platform.EventRecord {
 	return append([]platform.EventRecord(nil), r.events...)
 }
 
-// findEvent 는 번호로 기록 하나를 찾는다.
+// findEvent follows the documented behavioral contract.
 func findEvent(records []platform.EventRecord, id messages.ID) (platform.EventRecord, bool) {
 	for _, record := range records {
 		if record.ID == messages.EventValue(id) {
@@ -438,9 +437,9 @@ func TestLoadConfigReadsRedirectSettings(t *testing.T) {
 	got := config.Redirect
 
 	if got.Stdin.Path != `C:\logs\feed.txt` || got.Stdout.Path != `C:\logs\out.log` || got.Stderr.Path != `C:\logs\err.log` {
-		t.Errorf("paths = %q, %q, %q (환경 변수를 펼쳐야 한다)", got.Stdin.Path, got.Stdout.Path, got.Stderr.Path)
+		t.Errorf("paths = %q, %q, %q (environment variables must be expanded)", got.Stdin.Path, got.Stdout.Path, got.Stderr.Path)
 	}
-	// 지정하지 않은 항목은 설정 계약의 기본값을 그대로 쓴다.
+	// if follows the documented behavioral contract.
 	if got.Stdin.ShareMode != 2 || got.Stdin.CreationDisposition != 3 || got.Stdin.FlagsAndAttributes != 128 {
 		t.Errorf("stdin = %+v, want the contract defaults", got.Stdin)
 	}
@@ -454,7 +453,7 @@ func TestLoadConfigReadsRedirectSettings(t *testing.T) {
 		t.Errorf("flags = %+v", got)
 	}
 	if got.RotateSeconds != 3600 || got.RotateBytes != 1<<32|1024 || got.RotateDelay != 250*time.Millisecond {
-		t.Errorf("rotation = %d초 %d바이트 %s", got.RotateSeconds, got.RotateBytes, got.RotateDelay)
+		t.Errorf("rotation = %d seconds %d bytes %s", got.RotateSeconds, got.RotateBytes, got.RotateDelay)
 	}
 	if !got.Any() || !got.Relayed(got.Stdout) {
 		t.Error("timestamping must make the output streams relayed")
@@ -474,13 +473,13 @@ func TestLoadConfigWithoutRedirectSettingsRedirectsNothing(t *testing.T) {
 }
 
 func TestLoadConfigStdinCopyAndTruncateIsNotASetting(t *testing.T) {
-	// AppStdinCopyAndTruncate 는 전수 목록에 없다. 표준 입력은 갈아끼우지 않는다.
+	// if follows the documented behavioral contract. See AppStdinCopyAndTruncate.
 	if _, ok := settings.Lookup("AppStdinCopyAndTruncate"); ok {
 		t.Fatal("AppStdinCopyAndTruncate must not exist")
 	}
 }
 
-// runRedirectedService 는 자식이 살아 있는 상태까지 서비스를 몰고 간다.
+// runRedirectedService follows the documented behavioral contract.
 func runRedirectedService(t *testing.T, reader *fakeReader) (*fakeRuntime, chan Result) {
 	t.Helper()
 	runtime := newRuntime()
@@ -490,7 +489,7 @@ func runRedirectedService(t *testing.T, reader *fakeReader) (*fakeRuntime, chan 
 	service := New(reader, runtime)
 	never := make(chan time.Time)
 	service.After = func(wait time.Duration) <-chan time.Time {
-		// 기동 판정 대기만 곧바로 끝내 자식을 살아 있는 것으로 본다.
+		// if follows the documented behavioral contract.
 		if wait == 1500*time.Millisecond {
 			ready := make(chan time.Time, 1)
 			ready <- time.Now()
@@ -531,7 +530,7 @@ func TestSupervisorHandsRedirectedHandlesToTheChild(t *testing.T) {
 		t.Errorf("redirect config = %+v", opened.config)
 	}
 	if begun, _, _ := opened.counts(); begun != 1 {
-		t.Errorf("Begin calls = %d, want 1 (자식이 손잡이를 넘겨받은 뒤 한 번)", begun)
+		t.Errorf("Begin calls = %d, want 1 (once after the child inherits the handles)", begun)
 	}
 
 	runtime.handler(platform.ControlRequest{Code: control.Rotate})
@@ -565,7 +564,7 @@ func TestSupervisorSkipsRedirectionWhenNothingIsRedirected(t *testing.T) {
 	if spec := runtime.lastSpec(); spec.Stdin != 0 || spec.Stdout != 0 || spec.Stderr != 0 {
 		t.Errorf("handles = %+v, want zeroes so the child inherits nothing", spec)
 	}
-	// ROTATE 는 돌리는 통로가 없어도 안전해야 한다.
+	// This section follows the documented behavioral contract. See ROTATE.
 	runtime.handler(platform.ControlRequest{Code: control.Rotate})
 	runtime.handler(platform.ControlRequest{Code: control.Stop})
 	select {

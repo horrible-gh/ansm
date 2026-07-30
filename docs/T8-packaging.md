@@ -1,166 +1,120 @@
-# T8 패키징 — 메시지 테이블, 이벤트 기록, 32비트, 배포 산출물
+# T8 packaging: message tables, event recording, 32-bit support, and distribution artifacts
 
-> 대상: T1 스파이크가 T8 로 미룬 항목 셋(`.syso` 생성기, 32비트 지원 여부,
-> `NSSM_VERSION`·`NSSM_BUILD_DATE` 실제 값)과 그에 딸린 이벤트 로그 기록 경로.
-> 확인 환경: Windows 11 Pro 26100, go1.26 windows/amd64
-> 대조 대상: `C:\Program Files\nssm\nssm.exe`(설치된 원본 2.24)와
-> `.legacy/nssm-master`(2.24-101-g897c7ad 소스 스냅샷)
+> Scope: the `.syso` generator, 32-bit decision, version/build-date values deferred by T1, and the related event-log path
+> Verified on: Windows 11 Pro 26100, Go 1.26 windows/amd64
+> Compared with: installed NSSM 2.24 at `C:\Program Files\nssm\nssm.exe` and the `.legacy/nssm-master` 2.24-101-g897c7ad source snapshot
 
 ---
 
-## 1. 이벤트 번호는 1001 이 아니다
+## 1. The recorded event value is not just 1001
 
-설계 문서(P0007 7.2)는 이벤트 로그 번호를 1001–1081 로 못 박았고, 지금까지
-`internal/messages` 도 그 값을 그대로 들고 있었다. 그런데 **기록에 실리는 값은
-그 번호가 아니다.**
+P0007 7.2 defines event codes 1001-1081, and `internal/messages` preserves those codes. Inspection of an NSSM event record showed:
 
-이 기계에 남아 있던 원본 나씀의 이벤트 기록을 읽어 확인했다.
-
-```
+```text
 EventID    : 1008
 InstanceId : 1073742832     # 0x40000000 | 1008
 ```
 
-곧 실제 값은 `(심각도 << 30) | 번호` 다. mc 의 기본값대로 Facility 와 Customer
-비트는 0 이고 심각도만 상위 두 비트에 실린다. 이벤트 뷰어가 "이벤트 ID" 칸에
-보여주는 것은 하위 16비트라 사람 눈에는 1008 이지만, **문구를 찾는 열쇠는
-32비트 값 전체다.**
+The actual recorded value is `(severity << 30) | code`. Facility and Customer bits remain zero, while severity occupies the top two bits according to the message-compiler defaults. Event Viewer displays only the low 16-bit Event ID, but message lookup uses the full 32-bit value.
 
-이 사실은 기존 설치본이 남긴 과거 기록까지 좌우한다. 우리가 1008 로 적고
-메시지 표에도 1008 만 넣으면, 새 기록은 보이더라도 과거 기록은 전부
-"이벤트 ID 에 대한 설명을 찾을 수 없습니다" 가 된다.
+This also affects records written by an earlier NSSM installation. If ANSM stored and indexed only 1008, new records might display while old records using `0x40000000 | 1008` would lose their descriptions.
 
-`internal/messages` 는 상수를 1001–1081 로 두되(설계 문서의 계약), 기록하는
-자리에서 `EventValue` 로 심각도를 얹는다. 심각도는 목록 파일이 정하고,
-`internal/messages/eventlog_test.go` 가 둘이 어긋나지 않았음을 매번 확인한다.
+`internal/messages` therefore keeps the protocol codes unchanged and applies severity at the recording boundary through `EventValue`. Severity comes from the message catalog, and `internal/messages/eventlog_test.go` verifies that the two sources remain aligned.
 
-### 1.1 수준 칸은 또 따로다
+### 1.1 Event Viewer level is a separate value
 
-이벤트 뷰어의 "수준"(오류·경고·정보)은 번호가 아니라 `ReportEvent` 의 wType 이
-정한다. 원본은 이 값을 호출부에서 손으로 넘기는데, **131개 호출부 가운데
-9개가 목록 파일의 심각도와 어긋난다.**
+The Event Viewer level (Error, Warning, or Information) comes from the `wType` argument to `ReportEvent`, not from the encoded message value. Nine of NSSM's 131 call sites intentionally or accidentally differ from catalog severity:
 
-| 번호 | 목록 파일 | 원본 호출부 |
+| Code | Catalog severity | NSSM call-site type |
 |---|---|---|
-| 1043 서비스 복구 조치 설정 실패 | Informational | Error |
-| 1064 설명 설정 실패 | Informational | Error |
-| 1065 지연 시작 설정 실패 | Informational | Error |
-| 1066 잘못된 우선순위 | Informational | Warning |
-| 1069 GetProcessAffinityMask 실패 | Warning | Error |
-| 1070 SetProcessAffinityMask 실패 | Error | Warning |
-| 1079 Start/Pre 훅 중단 | Informational | Error |
-| 1080 훅 기동 실패 | Informational | Error |
-| 1081 훅 명령 없음 | Informational | Error |
+| 1043, service recovery-action configuration failed | Informational | Error |
+| 1064, description configuration failed | Informational | Error |
+| 1065, delayed-start configuration failed | Informational | Error |
+| 1066, invalid priority | Informational | Warning |
+| 1069, GetProcessAffinityMask failed | Warning | Error |
+| 1070, SetProcessAffinityMask failed | Error | Warning |
+| 1079, Start/Pre hook aborted | Informational | Error |
+| 1080, hook launch failed | Informational | Error |
+| 1081, hook command missing | Informational | Error |
 
-원본의 실수로 보이지만 밖에서 보이는 것을 같게 두는 것이 이식의 목표이므로
-`eventTypeOverride` 에 아홉 개를 그대로 적었다. 시험이 이 목록의 크기와 내용을
-함께 지킨다 — 늘어나도 줄어도 원본과 어긋난 것이다.
+Because observable compatibility is the port's goal, `eventTypeOverride` preserves all nine call-site values. Tests fix both the contents and the size of that list so additions or removals are visible compatibility changes.
 
 ---
 
-## 2. `.syso` 생성기
+## 2. `.syso` generator
 
-T1 스파이크의 결정(외부 툴체인을 쓰지 않는 Go 생성기)을 그대로 실행했다.
-다만 입력을 바꿨다.
+T8 implements the Go-only generator selected by the T1 spike. The source inputs were adjusted for reproducibility:
 
-| | T1 계획 | T8 실제 |
+| Input | T1 plan | T8 implementation |
 |---|---|---|
-| 메시지 목록 | `.legacy` 의 UTF-16 원본 | 저장소에 UTF-8·LF 로 넣은 `resources/messages.mc` |
-| 아이콘 | 미정 | 저장소에 넣은 `resources/nssm.ico` |
+| Message catalog | UTF-16 file from `.legacy` | UTF-8/LF `resources/messages.mc` committed to this repository |
+| Icon | Undecided | Committed `resources/nssm.ico` |
 
-목록 파일을 저장소에 넣은 이유는 하나다. 리소스의 내용이 저장소 밖에 있으면
-빌드가 재현되지 않는다. 파서(`internal/msgcat`)는 UTF-16LE 원본도 그대로 받으므로,
-원본 파일을 넘겨 같은 결과가 나오는지 언제든 대조할 수 있다.
+The catalog is committed because a resource whose source lives outside the repository cannot be reproduced. `internal/msgcat` still accepts the original UTF-16LE file so generated results can be compared directly.
 
-산출물 구성:
+Generated resources are:
 
-| 리소스 | 내용 |
+| Resource | Contents |
 |---|---|
-| MESSAGETABLE ×3 | 영어·프랑스어·이탈리아어. 목록 파일의 205개 문구 전부 |
-| ICON ×4 + GROUP_ICON | 원본 아이콘 그대로 |
-| VERSION | 버전·구성·빌드 일자. 세 언어의 Translation |
-| MANIFEST | 원본과 같은 `asInvoker` |
+| Three MESSAGETABLE resources | All 205 English, French, and Italian messages |
+| Four ICON resources plus GROUP_ICON | Original NSSM icon |
+| VERSION | Version, build configuration, build date, and Translation entries for all three languages |
+| MANIFEST | NSSM-compatible `asInvoker` execution level |
 
-### 2.1 링커에 넘기는 모양
+### 2.1 COFF shape accepted by the Go linker
 
-Go 링커가 받아들이는 것은 `.rsrc` 구역을 가진 COFF 오브젝트뿐이다.
-`internal/rsrc` 가 만드는 오브젝트는 구역 하나와 심볼 하나짜리다.
-자료 항목(`IMAGE_RESOURCE_DATA_ENTRY`)의 `OffsetToData` 자리마다 재배치를
-하나 걸고, 그 자리에 구역 안에서의 위치를 미리 적어 둔다. COFF 는 더할 값을
-필드에 담으므로, 링커는 `.rsrc` 가 실행 파일에서 놓인 주소를 거기에 더하기만
-하면 된다.
+The Go linker accepts a COFF object with a `.rsrc` section. `internal/rsrc` emits one section and one symbol. Every `IMAGE_RESOURCE_DATA_ENTRY.OffsetToData` field has a relocation and already contains its section-relative addend; the linker only adds the final load address of `.rsrc`.
 
-시각 도장은 0 이다. 같은 입력이 언제나 같은 바이트를 내야 배포본을 다시
-만들어 견줄 수 있다.
+The COFF timestamp is zero so identical inputs always produce identical bytes.
 
-### 2.2 대조
+### 2.2 Compatibility comparison
 
-설치된 원본 실행 파일에서 MESSAGETABLE 을 꺼내 우리가 만든 것과 맞춰 봤다.
-두 판이 겹치는 **이벤트 문구 77개가 한 바이트도 다르지 않았다**(나머지 4개는
-2.24-101 에서 새로 생긴 번호라 원본 2.24 에 없다). 항목 길이의 채움 규칙,
-블록을 가르는 자리, 심각도를 얹은 번호가 모두 같다는 뜻이다.
+The installed NSSM executable's MESSAGETABLE was compared with the generated resource. All 77 messages present in both versions matched byte for byte; four later messages exist only in the 2.24-101 snapshot. This validates entry padding, block boundaries, and severity-encoded values.
 
-링크한 뒤에는 `FormatMessage(FROM_HMODULE)` 로 실제 조회까지 확인했다.
-
-```
-64비트 1008 en : Started C:\app\worker.exe --serve for service MySvc in C:\app.
-32비트 1008 it : Avviati C:\app\worker.exe --serve per il servizio MySvc in C:\app.
-```
+After linking, `FormatMessage(FROM_HMODULE)` successfully read messages from both targets, including English code 1008 from the 64-bit executable and Italian code 1008 from the 32-bit executable.
 
 ---
 
-## 3. 32비트
+## 3. 32-bit behavior
 
-`SetProcessAffinityMask` 의 인수는 `DWORD_PTR` 이라 32비트 빌드에서는 32비트다.
-마스크 자체는 어느 빌드에서나 64비트로 읽고 쓴다 — 32비트 ANSM 이 64비트 기계의
-설정을 읽어 보여줄 수 있어야 하기 때문이다(P0007 3.2). 원본도 같은 이유로
-`__int64` 로 들고 있다가 적용 직전에 잘라 쓴다.
+`SetProcessAffinityMask` accepts a `DWORD_PTR`, which is 32 bits in a 32-bit build. Stored affinity values remain 64 bits in every build so a 32-bit ANSM can read and display settings created on a 64-bit machine, matching P0007 3.2 and NSSM's `__int64` storage.
 
-`affinity.Applicable` 이 그 자름을 판정으로 드러낸다. 32비트 ANSM 으로 32번
-이상의 CPU 를 지정하면 그 CPU 는 조용히 빠진다. 원본과 같은 동작이라 이벤트를
-더 남기지는 않지만, 이제 소스에서 의도된 자리로 보인다.
+`affinity.Applicable` makes the final narrowing explicit. In a 32-bit build, requested CPUs numbered 32 or higher are silently removed, matching NSSM behavior.
 
-기동 중 CPU 지정에 실패했을 때의 처리도 원본에 맞췄다. 시스템 마스크를 읽지
-못하면 1069 를 남기고 지정 값을 그대로 쓰며, 적용에 실패하면 1070 을 남긴다.
-**어느 쪽도 자식을 죽이지 않는다** — CPU 지정은 서비스 기동의 조건이 아니다.
+Startup affinity failures also preserve NSSM policy. Failure to read the system mask records event 1069 and continues with the requested mask; failure to apply the mask records event 1070. Neither failure terminates the child because affinity is not a startup precondition.
 
 ---
 
-## 4. 버전과 빌드 일자
+## 4. Version and build date
 
-T1 스파이크가 "원 저장소 이력이 없어 확정 불가" 로 미룬 항목이다. 결정은 이렇다.
+The T1 spike deferred these values because the original repository history was unavailable. T8 establishes the following rules:
 
-- 기본값은 이식의 바탕이 된 원본 스냅샷과 같다(`2.24-101-g897c7ad`, `2017-08-04`).
-  아무 것도 주입하지 않고 `go build` 만 해도 원본과 같은 한 줄이 나온다.
-- 배포 빌드는 저장소 이력에서 뽑아 링커로 덮어쓴다. 버전은
-  `git describe --tags --long`, 일자는 HEAD 커밋 날짜다. **손목시계를 보지 않는다.**
+- Default values match the source snapshot used for the port: `2.24-101-g897c7ad` and `2017-08-04`. A plain `go build` therefore reports the compatible version without injected values.
+- Distribution builds override the defaults from repository history. The version comes from `git describe --tags --long`, and the date comes from the HEAD commit date, never the wall clock.
 
-숫자 버전(파일 속성 창)은 원본 `version.cmd` 와 같은 규칙으로 문자열에서
-뽑는다. `2.24-101-g897c7ad` 는 2.24.101.0 이고, 태그에 정확히 맞지 않으므로
-`VS_FF_PRERELEASE` 가 선다.
+Numeric file versions follow NSSM's `version.cmd` rules. For example, `2.24-101-g897c7ad` becomes 2.24.101.0 and sets `VS_FF_PRERELEASE` because it is not exactly at a tag.
 
 ---
 
-## 5. 배포 산출물
+## 5. Distribution artifacts
 
-`tools/dist.ps1` 이 `dist\win64\ansm.exe` 와 `dist\win32\ansm.exe` 를 만든다.
-원본 배포 압축 파일과 같은 배치다.
+`tools/dist.ps1` produces `dist\win64\ansm.exe` and `dist\win32\ansm.exe`, matching the directory layout of NSSM distribution archives.
 
-재현 가능성을 위해 넷을 맞춰 두었다.
+Four controls make the output reproducible:
 
-1. 버전·일자는 이력에서 뽑는다.
-2. `-trimpath` 로 빌드 기계의 경로를 지운다.
-3. `-buildvcs=false` 로 작업 폴더가 깨끗한지 여부가 산출물을 바꾸지 않게 한다.
-4. 리소스 오브젝트의 시각 도장이 0 이다.
+1. Version and build date come from repository history.
+2. `-trimpath` removes build-machine paths.
+3. `-buildvcs=false` prevents dirty-worktree metadata from changing the executable.
+4. Resource-object timestamps are zero.
 
-같은 커밋에서 두 번 돌려 두 대상 모두 SHA-256 이 같음을 확인했다.
+Two consecutive builds from the same commit produced matching SHA-256 values for both targets.
 
 ---
 
-## 6. 이 단계에서 확정하지 않은 것
+## 6. Items not added in T8
 
-| 항목 | 이유 | 시점 |
+| Item | Reason | Status |
 |---|---|---|
-| 대화상자 리소스(RT_DIALOG) | 화면은 템플릿을 메모리에서 조립한다(T1 스파이크 2.3) | 붙이지 않음 |
-| 콘솔 문구를 FormatMessage 로 읽기 | 이식본은 `internal/messages` 의 Go 문자열을 쓴다 | 붙이지 않음 |
-| 서명·설치 관리자 | 배포 정책이 정해지지 않았다 | 미정 |
+| RT_DIALOG resources | The GUI assembles dialog templates in memory, as selected in T1 2.3 | Not used |
+| Reading console text through FormatMessage | ANSM uses Go strings from `internal/messages` | Not used |
+| Signing or an installer | No distribution policy has been established | Undecided |

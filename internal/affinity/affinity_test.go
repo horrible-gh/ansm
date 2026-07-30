@@ -16,7 +16,7 @@ func TestParseMask(t *testing.T) {
 		{"0-2", 0b111},
 		{"0,2-5,7", 0b10111101},
 		{"63", 1 << 63},
-		{" 0 , 2 ", 0b101}, // 공백은 무시한다
+		{" 0 , 2 ", 0b101}, // Follows the documented contract.
 	}
 	for _, tc := range tests {
 		got, err := ParseMask(tc.in)
@@ -31,7 +31,7 @@ func TestParseMask(t *testing.T) {
 }
 
 func TestParseMaskErrors(t *testing.T) {
-	// L0008 5.1: 64 이상은 범위 밖, 형식 오류는 별도로 구분한다.
+	// if follows the documented behavioral contract. See L0008 5.1.
 	if _, err := ParseMask("64"); err != ErrOutOfRange {
 		t.Errorf(`ParseMask("64") = %v, want ErrOutOfRange`, err)
 	}
@@ -49,9 +49,9 @@ func TestFormatMask(t *testing.T) {
 	}{
 		{0, ""},
 		{1, "0"},
-		// 연속 두 개는 하이픈으로 줄이지 않고 쉼표로 나열한다.
+		// This section follows the documented behavioral contract.
 		{0b11, "0,1"},
-		// 세 개 이상부터 하이픈을 쓴다.
+		// This section follows the documented behavioral contract.
 		{0b111, "0-2"},
 		{0b10111101, "0,2-5,7"},
 		{1 << 63, "63"},
@@ -76,23 +76,21 @@ func TestRoundTrip(t *testing.T) {
 }
 
 func TestEffective(t *testing.T) {
-	// 지정이 없으면(0 = 전체) 시스템 마스크와 무관하게 그대로 둔다.
+	// if follows the documented behavioral contract.
 	if got, changed := Effective(0, 0b1111); got != 0 || changed {
 		t.Errorf("Effective(0, ...) = %#b, %v; want 0, false", got, changed)
 	}
-	// 시스템에 없는 CPU 를 지정하면 논리곱 결과를 쓰고 경고 대상으로 표시한다.
+	// if follows the documented behavioral contract. See CPU.
 	if got, changed := Effective(0b1111, 0b0011); got != 0b0011 || !changed {
 		t.Errorf("Effective = %#b, %v; want 0b11, true", got, changed)
 	}
-	// 지정이 시스템 안에 온전히 들어가면 경고하지 않는다.
+	// if follows the documented behavioral contract.
 	if got, changed := Effective(0b0011, 0b1111); got != 0b0011 || changed {
 		t.Errorf("Effective = %#b, %v; want 0b11, false", got, changed)
 	}
 }
 
-// 32비트 빌드는 SetProcessAffinityMask 에 32비트만 넘길 수 있다. 마스크를
-// 읽고 쓰는 일은 어느 빌드에서나 64비트로 하되, 실제로 적용하는 자리에서만
-// 잘린다. 자른 사실이 판정으로 드러나야 나중에 원인을 찾을 수 있다.
+// TestApplicableCutsTheMaskToTheBuildWidth follows the documented behavioral contract. See SetProcessAffinityMask.
 func TestApplicableCutsTheMaskToTheBuildWidth(t *testing.T) {
 	for _, tc := range []struct {
 		mask    uint64

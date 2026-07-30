@@ -23,7 +23,7 @@ func TestVersionFlagWinsOverEverything(t *testing.T) {
 		t.Errorf("Mode = %v, want ModeVersion", got.Mode)
 	}
 	if *calls != 0 {
-		t.Error("SCM 연결을 시도하면 안 된다")
+		t.Error("must not attempt an SCM connection")
 	}
 }
 
@@ -37,7 +37,7 @@ func TestKnownCommandBecomesManager(t *testing.T) {
 		t.Errorf("Command = %q, want install", got.Command.Name)
 	}
 	if *calls != 0 {
-		t.Error("아는 명령이면 SCM 연결을 시도하지 않는다")
+		t.Error("a recognized command must not attempt an SCM connection")
 	}
 }
 
@@ -49,8 +49,7 @@ func TestNoArgsAndNoStdinBecomesService(t *testing.T) {
 }
 
 func TestStdinPresentNeverTriesDispatcher(t *testing.T) {
-	// L0008 2.1·5.9: 표준 입력 손잡이가 있으면 서비스 연결을 시도조차 하지 않는다.
-	// 구형 Windows 에서 연결 시도가 수 초 걸리는 것을 피하려는 원본 판별이다.
+	// This section follows the documented behavioral contract. See L0008 2.1, Windows.
 	connect, calls := connectsTo(platform.DispatchServed)
 	got := ResolveMode([]string{"ansm.exe"}, probe(true), connect)
 	if got.Mode != ModeUsage {
@@ -62,12 +61,12 @@ func TestStdinPresentNeverTriesDispatcher(t *testing.T) {
 }
 
 func TestDispatchFailureCodes(t *testing.T) {
-	// 사람이 인수 없이 실행한 경우 → 사용법.
+	// This section follows the documented behavioral contract.
 	connect, _ := connectsTo(platform.DispatchNotAService)
 	if got := ResolveMode([]string{"ansm.exe"}, probe(false), connect); got.Mode != ModeUsage {
 		t.Errorf("Mode = %v, want ModeUsage", got.Mode)
 	}
-	// 그 밖의 실패는 실제 오류다 → 이벤트 1001, 종료 코드 100.
+	// This section follows the documented behavioral contract.
 	connect, _ = connectsTo(platform.DispatchFailed)
 	if got := ResolveMode([]string{"ansm.exe"}, probe(false), connect); got.Mode != ModeDispatchError {
 		t.Errorf("Mode = %v, want ModeDispatchError", got.Mode)
@@ -75,7 +74,7 @@ func TestDispatchFailureCodes(t *testing.T) {
 }
 
 func TestUnknownCommandFallsThroughToServiceProbe(t *testing.T) {
-	// 아는 명령이 아니면 곧바로 사용법으로 접지 않고 서비스 판별을 한 번 더 거친다.
+	// This section follows the documented behavioral contract.
 	connect, calls := connectsTo(platform.DispatchNotAService)
 	got := ResolveMode([]string{"ansm.exe", "frobnicate"}, probe(false), connect)
 	if got.Mode != ModeUsage {

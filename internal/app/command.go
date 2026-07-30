@@ -19,7 +19,7 @@ import (
 	"ansm/internal/settings"
 )
 
-// RunCommand 는 T3 관리 명령 분배기다.
+// RunCommand follows the documented behavioral contract. See RunCommand, T3.
 func RunCommand(env Env, c cli.Command, argv []string) int {
 	args := argv[2:]
 	if c.AlwaysGUI || (c.GUIWhenShort && len(args) < 2) {
@@ -109,9 +109,6 @@ func processesCommand(env Env, services []string) int {
 	return failures
 }
 func installCommand(env Env, args []string) int {
-	if len(args) < 2 {
-		return notYet(env, cli.Command{Name: "install"}, "T9(화면)")
-	}
 	if !env.Gateway.IsAdmin() {
 		writeLine(env.Stderr, "Administrator access is needed to install a service.")
 		return ExitUsage
@@ -134,9 +131,6 @@ func installCommand(env Env, args []string) int {
 }
 
 func removeCommand(env Env, args []string) int {
-	if len(args) == 0 {
-		return notYet(env, cli.Command{Name: "remove"}, "T9(화면)")
-	}
 	if len(args) != 2 || !strings.EqualFold(args[1], "confirm") {
 		writeLine(env.Stderr, fmt.Sprintf("To remove a service without confirmation: %s remove <servicename> confirm", ExeName(env.Argv)))
 		return 100
@@ -475,7 +469,7 @@ func dumpCommand(env Env, args []string) int {
 		}
 		vals := valueArgs(s, v)
 		if s.Name == "ObjectName" && !strings.EqualFold(v.Text, "LocalSystem") {
-			vals = append(vals, "새 암호를 여기 넣으세요")
+			vals = append(vals, "****")
 		}
 		line, ok := dumpLine(prefix, "set", target, s.Name, vals)
 		if ok {
@@ -615,8 +609,5 @@ func commandError(env Env, op string, err error, code int) int {
 	writeLine(env.Stderr, fmt.Sprintf("%s: %s failed: %v", ExeName(env.Argv), op, err))
 	return code
 }
-func notYet(env Env, c cli.Command, stage string) int {
-	writeLine(env.Stderr, fmt.Sprintf("%s: command %q is not wired yet; it lands in %s.", ExeName(env.Argv), c.Name, stage))
-	return ExitUsage
-}
+
 func writeLine(w io.Writer, s string) { fmt.Fprint(w, s+"\r\n") }

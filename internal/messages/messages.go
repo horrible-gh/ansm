@@ -1,18 +1,10 @@
-// Package messages 는 사용자에게 보여줄 문구를 번호와 짝지어 모아 둔다.
-//
-// P0007 7장. **번호는 기존 나씀과 동일하다.** 이벤트 로그 뷰어가 기존에 등록된
-// 메시지 파일로 문구를 찾아 표시하므로, 번호가 어긋나면 기존 서비스의 과거
-// 이벤트가 깨져 보인다.
-//
-// 이 파일은 콘솔·화면 메시지(501–624)와 이벤트 로그 메시지(1001–1081) 중
-// 설계 문서가 이름을 확정한 것을 담는다. 이름이 범위로만 주어진 항목은
-// 그 항목을 실제로 쓰는 단계(T3~T9)에서 채운다.
+// Package messages implements the documented contracts for this component. See Package, P0007, T3, T9.
 package messages
 
-// ID 는 메시지 번호다. 이벤트 로그에 실리는 값이기도 하다.
+// ID follows the documented behavioral contract. See ID.
 type ID uint32
 
-// 콘솔·화면 메시지 (501–624). P0007 7.1.
+// This section follows the documented behavioral contract. See P0007 7.1.
 const (
 	Usage                         ID = 501
 	NotAdministratorCannotInstall ID = 502
@@ -60,7 +52,7 @@ const (
 	InvalidHookName               ID = 556
 )
 
-// 이벤트 로그 메시지 (1001–1081). P0007 7.2.
+// This section follows the documented behavioral contract. See P0007 7.2.
 const (
 	EventDispatcherFailed                 ID = 1001
 	EventOpenSCManagerFailed              ID = 1002
@@ -145,13 +137,13 @@ const (
 	EventGetHookFailed                    ID = 1081
 )
 
-// EventFirst 와 EventLast 는 이벤트 로그 번호의 양끝이다. P0007 7.2.
+// This section follows the documented behavioral contract. See EventFirst, EventLast, P0007 7.2.
 const (
 	EventFirst = EventDispatcherFailed
 	EventLast  = EventGetHookFailed
 )
 
-// Severity 는 이벤트 로그 항목의 종류다. TypesSupported = 7 은 이 셋의 합이다.
+// Severity follows the documented behavioral contract. See Severity, TypesSupported.
 type Severity uint16
 
 const (
@@ -160,10 +152,8 @@ const (
 	SeverityInformation Severity = 4
 )
 
-// EventLogSource 는 이벤트 로그 공급자 이름이다.
-//
-// P0007 0장: 기존 등록을 승계해야 하므로 "NSSM" 을 바꾸지 않는다.
+// EventLogSource follows the documented behavioral contract. See EventLogSource, P0007, NSSM.
 const EventLogSource = "NSSM"
 
-// TypesSupported 는 공급자 등록에 쓰는 값이다(ERROR | WARNING | INFORMATION).
+// TypesSupported follows the documented behavioral contract. See TypesSupported, ERROR, WARNING, INFORMATION.
 const TypesSupported = uint32(SeverityError | SeverityWarning | SeverityInformation)

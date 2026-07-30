@@ -1,16 +1,17 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  tools\dist.ps1 이 같은 커밋에서 두 번 돌아도 같은 바이트를 내는지 확인한다.
+  Verifies that tools\dist.ps1 produces identical bytes twice from one commit.
 
 .DESCRIPTION
-  win64, win32 ansm.exe 를 각각 두 번 만들어 SHA256 을 비교한다. 하나라도
-  다르면 exit 1, 모두 같으면 exit 0. 산출물은 임시 폴더에 만들고 끝나면
-  지운다 — 저장소의 dist\ 는 건드리지 않는다.
+  Builds win64 and win32 ansm.exe twice and compares SHA-256 values. The script
+  exits 1 on any mismatch and 0 when both targets match. Artifacts are created
+  in a temporary directory and removed afterward; the repository dist\ tree is
+  not changed.
 
 .PARAMETER OutDir
-  두 회차의 산출물을 놓을 부모 폴더. 비우면 FLOWGATE_TEST_SCRATCH 환경
-  변수(있으면) 아래, 없으면 임시 폴더 아래에 만든다.
+  Parent directory for both runs. When omitted, use FLOWGATE_TEST_SCRATCH when
+  available, otherwise use the system temporary directory.
 #>
 [CmdletBinding()]
 param(
@@ -32,9 +33,8 @@ Remove-Item -Recurse -Force $OutDir -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 try {
-  # dist.ps1 은 pwsh 로 돌리는 것을 전제로 한다(스크립트 안내 예시와 동일). Windows
-  # PowerShell 5.1 은 git describe 가 태그 없이 실패할 때 2>$null 로 죽인 에러를
-  # 그대로 종료 예외로 올려 dist.ps1 을 깨뜨린다.
+  # Run dist.ps1 with pwsh, matching its documented invocation. Windows
+  # PowerShell 5.1 can promote redirected git errors into terminating errors.
   & pwsh -NoProfile -File (Join-Path $root "tools\dist.ps1") -OutDir $run1
   if ($LASTEXITCODE -ne 0) { throw "first dist.ps1 run failed" }
   & pwsh -NoProfile -File (Join-Path $root "tools\dist.ps1") -OutDir $run2

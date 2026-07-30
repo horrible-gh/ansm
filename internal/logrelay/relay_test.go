@@ -11,7 +11,7 @@ import (
 	"ansm/internal/params"
 )
 
-// recordSink 는 쓰기와 갈아끼우기를 순서대로 적어 두는 시험용 목적지다.
+// recordSink follows the documented behavioral contract.
 type recordSink struct {
 	segments []string
 	current  strings.Builder
@@ -49,8 +49,7 @@ func (s *recordSink) all() []string {
 	return append(append([]string(nil), s.segments...), s.current.String())
 }
 
-// chunkReader 는 정해진 덩어리를 하나씩 돌려준다. 실제 파이프가 덩어리를
-// 어디서 끊어 줄지 알 수 없다는 점을 시험에 그대로 옮긴다.
+// chunkReader follows the documented behavioral contract.
 type chunkReader struct {
 	chunks [][]byte
 	errs   []error

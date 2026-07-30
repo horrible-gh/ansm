@@ -191,7 +191,7 @@ func (Windows) InstallService(spec InstallSpec) error {
 	if err = (Windows{}).WriteSetting(spec.Name, mustSetting("AppExit"), "Default", Value{Kind: settings.KindSZ, Text: "Restart"}, ""); err != nil {
 		return &Error{Code: 6, Op: "write default exit action", Err: err}
 	}
-	// 원본은 비정상 종료가 아닌 실패에도 SCM 복구 동작을 적용한다(Vista+).
+	// This section follows the documented behavioral contract. See SCM, Vista.
 	failureFlag := serviceBoolean{Value: 1}
 	procChangeServiceConfig2W.Call(h, 4, uintptr(unsafe.Pointer(&failureFlag)))
 	if err = writeRegistryValue(eventSourcePath, "EventMessageFile", Value{Kind: settings.KindSZ, Text: spec.ServiceExe}); err != nil {

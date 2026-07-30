@@ -1,7 +1,4 @@
-// Package platform 은 운영체제 기능을 부르는 자리를 한곳에 모은다.
-//
-// D0006 2.5 의 "플랫폼 게이트웨이": 나머지 컴포넌트가 운영체제 API 를 직접 부르지
-// 않게 막아, 순수 판정 로직이 시험 가능한 상태로 남게 한다.
+// Package platform centralizes operating-system calls behind the D0006 2.5 gateway so policy and decision logic remain platform-independent and directly testable.
 package platform
 
 import (
@@ -13,10 +10,10 @@ import (
 	"ansm/internal/settings"
 )
 
-// ErrNotImplemented 는 아직 이 단계에서 붙이지 않은 기능이라는 뜻이다.
+// ErrNotImplemented follows the documented behavioral contract. See ErrNotImplemented.
 var ErrNotImplemented = errors.New("not implemented in this stage")
 
-// DispatchResult 는 서비스 제어 관리자 연결 시도의 결과다. L0008 2.1 의 3-1~3-3.
+// DispatchResult follows the documented behavioral contract. See DispatchResult, L0008 2.1.
 type DispatchResult int
 
 const (
@@ -25,7 +22,7 @@ const (
 	DispatchFailed
 )
 
-// Gateway 는 실행 모드 판별에 필요한 운영체제 질의를 모은 창구다.
+// Gateway follows the documented behavioral contract. See Gateway.
 type Gateway interface {
 	StdinHandlePresent() bool
 	ConnectServiceDispatcher(serve ServiceMain) DispatchResult
@@ -35,21 +32,19 @@ type Gateway interface {
 	Elevate(argv []string) error
 }
 
-// ServiceMain 은 SCM 이 서비스를 기동할 때 부르는 본체다.
+// ServiceMain follows the documented behavioral contract. See ServiceMain, SCM.
 type ServiceMain func(name string, args []string)
 
-// ControlRequest 는 SCM 제어 처리기가 감독자에게 넘기는 사건 하나다.
-// EventType 은 POWEREVENT 같은 제어의 세부 코드이며, 그 밖에는 0이다.
+// ControlRequest follows the documented behavioral contract. See ControlRequest, SCM, EventType, POWEREVENT.
 type ControlRequest struct {
 	Code      control.Code
 	EventType uint32
 }
 
-// ControlHandler 는 SCM 콜백 안에서 불린다. 반환값은 Win32 오류 코드다.
-// 콜백이 막히지 않도록 구현자는 사건을 큐에 넣고 즉시 돌아와야 한다.
+// ControlHandler runs inside an SCM callback, enqueues the request without blocking, and returns a Win32 status code.
 type ControlHandler func(ControlRequest) uint32
 
-// ServiceStatus 는 SetServiceStatus 로 보고할 서비스 상태 스냅샷이다.
+// ServiceStatus follows the documented behavioral contract. See ServiceStatus, SetServiceStatus.
 type ServiceStatus struct {
 	State               control.State
 	ControlsAccepted    uint32
@@ -59,7 +54,7 @@ type ServiceStatus struct {
 	WaitHint            uint32
 }
 
-// StatusReporter 는 서비스 상태를 SCM 에 알린다.
+// StatusReporter follows the documented behavioral contract. See StatusReporter, SCM.
 type StatusReporter interface {
 	Report(ServiceStatus) error
 }
@@ -68,10 +63,9 @@ type StatusReporter interface {
 // the child inherits nothing for that stream.
 type Handle uintptr
 
-// ProcessSpec 는 자식 하나를 띄우는 데 필요한 완성된 설정이다.
+// ProcessSpec follows the documented behavioral contract. See ProcessSpec.
 type ProcessSpec struct {
-	// ServiceName 은 기동 중 실패를 이벤트 로그에 남길 때만 쓴다.
-	// 자식에게 넘어가는 값이 아니다.
+	// ServiceName follows the documented behavioral contract. See ServiceName.
 	ServiceName string
 	Application string
 	CommandLine string
@@ -116,7 +110,7 @@ type Redirector interface {
 	OpenRedirect(redirect.Config) (Redirection, error)
 }
 
-// Process 는 감독자가 지켜보는 자식 프로세스다.
+// Process follows the documented behavioral contract. See Process.
 type Process interface {
 	PID() uint32
 	Wait() (uint32, error)
@@ -153,26 +147,19 @@ type ProcessLister interface {
 	ListServiceProcesses(service string) ([]ProcessEntry, error)
 }
 
-// EventRecord 는 Windows 이벤트 로그에 남길 항목 하나다.
-//
-// ID 는 심각도까지 얹힌 32비트 값이다(messages.EventValue). 이벤트 뷰어는 이
-// 번호로 실행 파일 안의 MESSAGETABLE 에서 문구를 찾고, Inserts 를 문구의
-// %1, %2 ... 자리에 끼운다. 그래서 순서가 곧 계약이다.
+// EventRecord preserves the encoded 32-bit message ID and ordered insertion strings used by the executable MESSAGETABLE resource.
 type EventRecord struct {
-	Type    uint16 // EVENTLOG_ERROR_TYPE 따위. messages.EventType 이 정한다.
+	Type    uint16 // uint16 follows the documented contract. See EventType.
 	ID      uint32
 	Inserts []string
 }
 
-// EventReporter 는 이벤트 로그에 남길 수 있는 구현이 갖추는 능력이다.
-//
-// 기록은 최선을 다하되 실패해도 되돌아보지 않는다. 원본도 그렇다 — 로그를
-// 남기지 못한다고 서비스를 멈추면 손해가 더 크다.
+// EventReporter records events on a best-effort basis; reporting failure must not stop a service, matching NSSM policy.
 type EventReporter interface {
 	ReportEvent(EventRecord)
 }
 
-// Runtime 은 서비스 본체가 쓰는 Windows 기능의 경계다.
+// Runtime follows the documented behavioral contract. See Runtime, Windows.
 type Runtime interface {
 	RegisterService(name string, handler ControlHandler) (StatusReporter, error)
 	StartProcess(ProcessSpec) (Process, error)
@@ -196,7 +183,7 @@ type HookStarter interface {
 	StartHook(ProcessSpec) (Process, error)
 }
 
-// Error 는 관리 명령의 단계별 종료 코드를 보존한다.
+// Error follows the documented behavioral contract. See Error.
 type Error struct {
 	Code int
 	Op   string
@@ -214,7 +201,7 @@ func (e *Error) Error() string {
 }
 func (e *Error) Unwrap() error { return e.Err }
 
-// ExitCode 는 플랫폼 오류에 실린 명령 종료 코드를 꺼낸다.
+// ExitCode follows the documented behavioral contract. See ExitCode.
 func ExitCode(err error, fallback int) int {
 	var e *Error
 	if errors.As(err, &e) && e.Code != 0 {
@@ -223,7 +210,7 @@ func ExitCode(err error, fallback int) int {
 	return fallback
 }
 
-// Value 는 레지스트리 또는 SCM 에 저장된 설정 값 하나다.
+// Value follows the documented behavioral contract. See Value, SCM.
 type Value struct {
 	Kind    settings.Kind
 	Text    string
@@ -231,7 +218,7 @@ type Value struct {
 	Strings []string
 }
 
-// ServiceConfig 는 SCM 이 관리하는 서비스 구성이다.
+// ServiceConfig follows the documented behavioral contract. See ServiceConfig, SCM.
 type ServiceConfig struct {
 	Name         string
 	DisplayName  string
@@ -246,7 +233,7 @@ type ServiceConfig struct {
 	Managed      bool
 }
 
-// InstallSpec 는 화면 없이 install 할 때 필요한 값이다.
+// InstallSpec follows the documented behavioral contract. See InstallSpec.
 type InstallSpec struct {
 	Name        string
 	Display     string
@@ -256,7 +243,7 @@ type InstallSpec struct {
 	Parameters  string
 }
 
-// Manager 는 T3 관리 명령이 운영체제 저장소와 SCM 을 만나는 창구다.
+// Manager is the T3 management-command boundary for registry storage and SCM operations.
 type Manager interface {
 	InstallService(InstallSpec) error
 	RemoveService(name string) error

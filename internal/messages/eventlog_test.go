@@ -8,9 +8,7 @@ import (
 	"ansm/internal/msgcat"
 )
 
-// catalogPath 는 리소스를 만들 때 쓰는 것과 같은 파일이다. 이 시험이 지키는
-// 것은 "Go 상수 → 이벤트 번호" 와 "메시지 목록 → 실행 파일 안의 문구" 가 같은
-// 번호를 가리킨다는 사실이다. 어긋나면 이벤트 뷰어가 문구를 못 찾는다.
+// catalog follows the documented behavioral contract. See Go.
 func catalog(t *testing.T) *msgcat.Catalog {
 	t.Helper()
 	c, err := msgcat.ParseFile(filepath.Join("..", "..", "resources", "messages.mc"))
@@ -57,9 +55,7 @@ func TestCatalogueEventsAreAllDeclared(t *testing.T) {
 	}
 }
 
-// 원본의 log_event 호출부가 목록의 심각도와 다른 수준을 넘기는 9개를 뺀
-// 나머지는 목록을 그대로 따라야 한다. 이 목록이 늘거나 줄면 어느 쪽이든
-// 원본과 어긋난 것이므로 여기서 멈춘다.
+// typeOverrides follows the documented behavioral contract.
 var typeOverrides = map[messages.ID]messages.Severity{
 	messages.EventConfigFailureActionsFailed:   messages.SeverityError,
 	messages.EventBogusPriority:                messages.SeverityWarning,
@@ -99,8 +95,7 @@ func TestEventTypeMatchesCatalogueSeverityExceptWhereNSSMDiffers(t *testing.T) {
 	}
 }
 
-// 이 값들은 이 기계에 남아 있던 원본 나씀의 이벤트 기록에서 직접 읽은 것이다.
-// 이식본이 같은 번호를 써야 과거 기록과 새 기록이 같은 문구를 찾는다.
+// TestEventValueMatchesRecordedNSSMValues follows the documented behavioral contract.
 func TestEventValueMatchesRecordedNSSMValues(t *testing.T) {
 	for _, tc := range []struct {
 		id    messages.ID

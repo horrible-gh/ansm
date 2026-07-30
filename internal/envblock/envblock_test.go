@@ -18,7 +18,7 @@ func TestParseSkipsDriveVariablesAndBadLines(t *testing.T) {
 }
 
 func TestParseKeepsEmptyValue(t *testing.T) {
-	// "KEY=" 는 값이 빈 항목이다. 무시하면 안 된다.
+	// This section follows the documented behavioral contract. See KEY.
 	got := Parse("KEY=")
 	want := []Entry{{Name: "KEY", Value: ""}}
 	if !reflect.DeepEqual(got, want) {
@@ -37,12 +37,12 @@ func TestUpsertIgnoresNameCase(t *testing.T) {
 	entries := []Entry{{Name: "Path", Value: "old"}}
 	entries = Upsert(entries, Entry{Name: "PATH", Value: "new"})
 	if len(entries) != 1 {
-		t.Fatalf("len = %d, want 1 (이름 비교는 대소문자를 구분하지 않는다)", len(entries))
+		t.Fatalf("len = %d, want 1 (name comparison is case-insensitive)", len(entries))
 	}
 	if entries[0].Value != "new" {
 		t.Errorf("Value = %q, want %q", entries[0].Value, "new")
 	}
-	// 원래 표기는 유지한다.
+	// if follows the documented behavioral contract.
 	if entries[0].Name != "Path" {
 		t.Errorf("Name = %q, want %q", entries[0].Name, "Path")
 	}
@@ -51,18 +51,18 @@ func TestUpsertIgnoresNameCase(t *testing.T) {
 func TestRemove(t *testing.T) {
 	base := []Entry{{Name: "A", Value: "1"}, {Name: "B", Value: "2"}}
 
-	// 이름만 맞으면 지운다.
+	// if follows the documented behavioral contract.
 	if got := Remove(base, "a", "", false); len(got) != 1 || got[0].Name != "B" {
 		t.Errorf("Remove(name only) = %+v", got)
 	}
-	// 값까지 맞아야 지운다 — 값이 다르면 남는다.
+	// if follows the documented behavioral contract.
 	if got := Remove(base, "A", "9", true); len(got) != 2 {
 		t.Errorf("Remove(value mismatch) = %+v, want unchanged", got)
 	}
 	if got := Remove(base, "A", "1", true); len(got) != 1 {
 		t.Errorf("Remove(value match) = %+v", got)
 	}
-	// 입력을 고치지 않는다.
+	// if follows the documented behavioral contract.
 	if len(base) != 2 {
 		t.Errorf("input mutated: %+v", base)
 	}
@@ -82,7 +82,7 @@ func TestMergeOverwritesAndAppends(t *testing.T) {
 	if len(got) != 3 {
 		t.Errorf("len = %d, want 3", len(got))
 	}
-	// base 는 그대로여야 한다.
+	// if follows the documented behavioral contract.
 	if v, _ := Lookup(base, "PATH"); v != "a" {
 		t.Errorf("base mutated: PATH = %q", v)
 	}

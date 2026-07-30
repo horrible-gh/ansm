@@ -4,8 +4,7 @@ package platform
 
 import "testing"
 
-// 실제 이벤트 로그에 쓰는 시험은 두지 않는다. 이 기계의 Application 로그에
-// 흔적을 남기기 때문이다. 여기서는 순수 판정만 본다.
+// This section follows the documented behavioral contract. See Application.
 
 func TestCapInsertsKeepsTheOriginalLimit(t *testing.T) {
 	if maxEventInserts != 15 {

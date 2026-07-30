@@ -14,8 +14,7 @@ func TestParse(t *testing.T) {
 		"IGNORE":  Ignore,
 		"Exit":    Exit,
 		"Suicide": Suicide,
-		// 알 수 없는 문자열은 Restart 로 본다. 손으로 고친 레지스트리 값이
-		// 서비스 기동을 막지 않게 하려는 원본 동작이다.
+		// This section follows the documented behavioral contract. See Restart.
 		"Reboot": Restart,
 		"":       Restart,
 	}
@@ -27,12 +26,12 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseComparesOnlyFirst16Chars(t *testing.T) {
-	// 앞 16자만 비교한다. 17자 이상은 잘린 앞부분으로 판정된다.
+	// This section follows the documented behavioral contract.
 	long := "Ignore" + strings.Repeat("x", params.ActionMax)
 	if got := Parse(long); got != Restart {
 		t.Errorf("Parse(long) = %v, want Restart", got)
 	}
-	// 16자 이내면 전체가 비교 대상이므로, 뒤에 군더더기가 붙으면 이름과 어긋난다.
+	// This section follows the documented behavioral contract.
 	padded := "Suicide" + strings.Repeat("y", params.ActionMax-len("Suicide"))
 	if got := Parse(padded); got != Restart {
 		t.Errorf("Parse(%q) = %v, want Restart", padded, got)
@@ -40,7 +39,7 @@ func TestParseComparesOnlyFirst16Chars(t *testing.T) {
 }
 
 func TestParseStrictRejectsUnknown(t *testing.T) {
-	// set 명령은 알 수 없는 값을 거부해야 한다(P0007 3.10, 종료 코드 6).
+	// if follows the documented behavioral contract. See P0007 3.10.
 	if _, ok := ParseStrict("Reboot"); ok {
 		t.Error("ParseStrict(Reboot) = ok, want rejected")
 	}
@@ -50,7 +49,7 @@ func TestParseStrictRejectsUnknown(t *testing.T) {
 }
 
 func TestNamesOrderIsContract(t *testing.T) {
-	// P0007 3.10 의 안내 순서이자 Action 값의 순서다.
+	// This section follows the documented behavioral contract. See P0007 3.10, Action.
 	want := []string{"Restart", "Ignore", "Exit", "Suicide"}
 	got := Names()
 	for i := range want {

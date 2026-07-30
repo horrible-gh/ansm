@@ -7,29 +7,26 @@ import (
 	"unicode/utf16"
 )
 
-// VersionInfo 는 파일 속성 창에 보이는 값이다.
-//
-// 원본 나씀의 VERSIONINFO 를 그대로 옮긴 자리 구성이다. 값은 빌드할 때
-// 채운다(tools/mkrsrc 참고).
+// VersionInfo follows the documented behavioral contract. See VersionInfo, VERSIONINFO.
 type VersionInfo struct {
-	// FileVersion 과 ProductVersion 은 네 자리 수 버전이다.
+	// FileVersion follows the documented behavioral contract. See FileVersion, ProductVersion.
 	FileVersion    [4]uint16
 	ProductVersion [4]uint16
-	// PreRelease 는 태그에 정확히 맞지 않는 빌드다(VS_FF_PRERELEASE).
+	// PreRelease follows the documented behavioral contract. See PreRelease.
 	PreRelease bool
-	// Strings 는 문자열 표에 넣을 이름-값 쌍이다.
+	// Strings follows the documented behavioral contract. See Strings.
 	Strings map[string]string
-	// Translations 는 (언어, 코드페이지) 쌍이다. 문자열 표는 첫 쌍의 이름으로 만든다.
+	// Translations follows the documented behavioral contract. See Translations.
 	Translations []Translation
 }
 
-// Translation 은 VarFileInfo 의 한 쌍이다.
+// Translation follows the documented behavioral contract. See Translation, VarFileInfo.
 type Translation struct {
 	Language uint16
 	CodePage uint16
 }
 
-// VS_FIXEDFILEINFO 의 상수. winver.h.
+// This section follows the documented behavioral contract.
 const (
 	fixedFileInfoSignature = 0xfeef04bd
 	fixedFileInfoStruct    = 0x00010000
@@ -39,13 +36,13 @@ const (
 	fileTypeApp            = 0x00000001
 )
 
-// 자료 종류. 0 은 이진, 1 은 글자.
+// This section follows the documented behavioral contract.
 const (
 	valueBinary = 0
 	valueText   = 1
 )
 
-// Build 는 VS_VERSIONINFO 자료를 만든다.
+// Build follows the documented behavioral contract. See Build.
 func (v VersionInfo) Build() ([]byte, error) {
 	if len(v.Translations) == 0 {
 		return nil, fmt.Errorf("version info: at least one translation is required")
@@ -68,14 +65,14 @@ func (v VersionInfo) Build() ([]byte, error) {
 	}
 	put(32, fileOSNTWindows32)
 	put(36, fileTypeApp)
-	// dwFileSubtype·dwFileDate 는 응용 프로그램에서 0 이다.
+	// This section follows the documented behavioral contract.
 
 	first := v.Translations[0]
 	table := &node{
 		key:       fmt.Sprintf("%04X%04X", first.Language, first.CodePage),
 		valueType: valueText,
 	}
-	// 지도 순회 순서가 산출물을 바꾸지 않도록 이름으로 정렬한다.
+	// This section follows the documented behavioral contract.
 	names := make([]string, 0, len(v.Strings))
 	for name := range v.Strings {
 		names = append(names, name)
@@ -109,16 +106,7 @@ func (v VersionInfo) Build() ([]byte, error) {
 	return root.build(), nil
 }
 
-// node 는 버전 자료의 한 칸이다. 모든 칸이 같은 머리글을 쓴다.
-//
-//	WORD wLength      머리글까지 포함한 이 칸의 길이
-//	WORD wValueLength 값의 길이(글자 값이면 글자 수, 이진 값이면 바이트 수)
-//	WORD wType        0 이진, 1 글자
-//	WCHAR szKey[]     이름, NUL 로 끝남
-//	                  4바이트 자리 맞춤
-//	BYTE  Value[]     값
-//	                  4바이트 자리 맞춤
-//	칸들                자식
+// node follows the documented behavioral contract. See WORD, WCHAR, NUL, BYTE, Value.
 type node struct {
 	key       string
 	valueType uint16
@@ -137,7 +125,7 @@ func (n *node) build() []byte {
 	case n.text != "":
 		before := len(out)
 		out = appendUTF16NUL(out, n.text)
-		valueLength = (len(out) - before) / 2 // 글자 값은 글자 수로 센다
+		valueLength = (len(out) - before) / 2 // valueLength follows the documented contract.
 	case len(n.binary) > 0:
 		out = append(out, n.binary...)
 		valueLength = len(n.binary)

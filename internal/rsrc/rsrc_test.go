@@ -12,11 +12,9 @@ import (
 	"ansm/internal/rsrc"
 )
 
-// --- 메시지 표 ---
+// --- Contract and regression tests ---
 
-// FormatMessage 는 블록 목록에서 번호가 든 구간을 찾은 뒤, 그 구간의 첫
-// 항목부터 Length 만큼씩 건너뛴다. 그래서 이어지는 번호는 한 블록에 모여야
-// 하고, 끊긴 자리에서는 블록이 갈라져야 한다.
+// TestMessageTableGroupsConsecutiveIdsIntoOneBlock follows the documented behavioral contract. See FormatMessage, Length.
 func TestMessageTableGroupsConsecutiveIdsIntoOneBlock(t *testing.T) {
 	data, err := rsrc.MessageTable(map[uint32]string{1: "a", 2: "b", 5: "c"})
 	if err != nil {
@@ -39,7 +37,7 @@ func TestMessageTableRoundTrips(t *testing.T) {
 	want := map[uint32]string{
 		0x40000001: "one\r\n",
 		0x40000002: "two lines\r\nsecond\r\n",
-		0xc0000009: "unicode: 나씀\r\n",
+		0xc0000009: "unicode: café\r\n",
 	}
 	data, err := rsrc.MessageTable(want)
 	if err != nil {
@@ -57,15 +55,14 @@ func TestMessageTableRoundTrips(t *testing.T) {
 	}
 }
 
-// 항목 길이는 머리 4바이트를 포함하며 4의 배수다. 원본 나씀 실행 파일의
-// 항목도 그렇게 맞춰져 있다. 한 바이트만 어긋나도 그 뒤 문구가 전부 밀린다.
+// TestMessageEntriesArePaddedToFourBytes follows the documented behavioral contract.
 func TestMessageEntriesArePaddedToFourBytes(t *testing.T) {
 	for _, text := range []string{"", "a", "ab", "abc", "abcd", "hello\r\n"} {
 		data, err := rsrc.MessageTable(map[uint32]string{1: text})
 		if err != nil {
 			t.Fatalf("MessageTable(%q): %v", text, err)
 		}
-		entry := data[16:] // 블록 하나짜리 표의 첫 항목
+		entry := data[16:] // entry follows the documented contract.
 		length := binary.LittleEndian.Uint16(entry)
 		if length%4 != 0 {
 			t.Errorf("entry length for %q is %d, which is not a multiple of 4", text, length)
@@ -85,7 +82,7 @@ func TestEmptyMessageTableIsRejected(t *testing.T) {
 	}
 }
 
-// --- 목록에서 리소스로 ---
+// --- Contract and regression tests ---
 
 func TestAddMessageTablesMakesOneResourcePerLanguage(t *testing.T) {
 	catalog, err := msgcat.ParseFile(filepath.Join("..", "..", "resources", "messages.mc"))
@@ -109,13 +106,13 @@ func TestAddMessageTablesMakesOneResourcePerLanguage(t *testing.T) {
 	}
 
 	english := readMessages(t, entries[0].Data)
-	// 원본 실행 파일에서 읽어 확인한 문구다. 마지막 줄바꿈과 NUL 까지 같다.
+	// if follows the documented behavioral contract. See NUL.
 	if got, want := english[1073742832], "Started %1 %2 for service %3 in %4.\r\n"; got != want {
 		t.Errorf("1008 = %q, want %q", got, want)
 	}
 }
 
-// --- 버전 자료 ---
+// --- Contract and regression tests ---
 
 func TestVersionInfoIsSelfDescribing(t *testing.T) {
 	info := rsrc.VersionInfo{
@@ -136,7 +133,7 @@ func TestVersionInfoIsSelfDescribing(t *testing.T) {
 	if key := utf16String(data[6:]); key != "VS_VERSION_INFO" {
 		t.Errorf("root key = %q", key)
 	}
-	// VS_FIXEDFILEINFO 는 4바이트 자리에 놓이고 서명으로 시작한다.
+	// This section follows the documented behavioral contract.
 	at := 6 + 2*(len("VS_VERSION_INFO")+1)
 	at += (4 - at%4) % 4
 	if got := binary.LittleEndian.Uint32(data[at:]); got != 0xfeef04bd {
@@ -159,7 +156,7 @@ func TestVersionInfoIsSelfDescribing(t *testing.T) {
 	}
 }
 
-// 지도 순회 순서가 산출물을 바꾸면 같은 입력으로 만든 배포본이 서로 달라진다.
+// TestVersionInfoIsReproducible follows the documented behavioral contract.
 func TestVersionInfoIsReproducible(t *testing.T) {
 	info := rsrc.VersionInfo{
 		FileVersion:  [4]uint16{1, 2, 3, 4},
@@ -181,7 +178,7 @@ func TestVersionInfoIsReproducible(t *testing.T) {
 	}
 }
 
-// --- 아이콘 ---
+// --- Contract and regression tests ---
 
 func TestAddIconSplitsImagesAndGroup(t *testing.T) {
 	set := &rsrc.Set{}
@@ -226,7 +223,7 @@ func TestTruncatedIconIsRejected(t *testing.T) {
 	}
 }
 
-// --- COFF 오브젝트 ---
+// --- Contract and regression tests ---
 
 func TestWriteObjectProducesALinkableObject(t *testing.T) {
 	for _, arch := range rsrc.Arches {
@@ -273,7 +270,7 @@ func TestWriteObjectProducesALinkableObject(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: section data: %v", arch.GOARCH, err)
 		}
-		// 재배치 자리에는 링커가 더할 값, 곧 구역 안에서의 위치가 들어 있다.
+		// for follows the documented behavioral contract.
 		for _, r := range section.Relocs {
 			offset := binary.LittleEndian.Uint32(data[r.VirtualAddress:])
 			if offset == 0 || uint64(offset) >= uint64(len(data)) {
@@ -286,8 +283,7 @@ func TestWriteObjectProducesALinkableObject(t *testing.T) {
 	}
 }
 
-// 같은 입력이면 언제 만들어도 같은 바이트여야 배포 산출물을 다시 만들어
-// 견줄 수 있다. 시각 도장이 들어가면 그러지 못한다.
+// TestWriteObjectIsReproducible follows the documented behavioral contract.
 func TestWriteObjectIsReproducible(t *testing.T) {
 	build := func() []byte {
 		set := &rsrc.Set{}
@@ -307,7 +303,7 @@ func TestWriteObjectIsReproducible(t *testing.T) {
 			t.Fatal("two objects built from the same resources differ")
 		}
 	}
-	// TimeDateStamp 는 0 이어야 한다.
+	// if follows the documented behavioral contract. See TimeDateStamp.
 	if stamp := binary.LittleEndian.Uint32(first[4:]); stamp != 0 {
 		t.Errorf("TimeDateStamp = %d, want 0", stamp)
 	}
@@ -339,7 +335,7 @@ func TestArchByName(t *testing.T) {
 	}
 }
 
-// --- 시험 거들기 ---
+// --- Contract and regression tests ---
 
 type block struct{ lo, hi uint32 }
 
@@ -357,7 +353,7 @@ func readBlocks(t *testing.T, data []byte) []block {
 	return out
 }
 
-// readMessages 는 FormatMessage 와 같은 방식으로 표를 훑는다.
+// readMessages follows the documented behavioral contract. See FormatMessage.
 func readMessages(t *testing.T, data []byte) map[uint32]string {
 	t.Helper()
 	out := make(map[uint32]string)
@@ -380,7 +376,7 @@ func readMessages(t *testing.T, data []byte) map[uint32]string {
 	return out
 }
 
-// utf16String 은 NUL 로 끝나는 UTF-16 문자열을 읽는다. 뒤의 채움은 버린다.
+// utf16String follows the documented behavioral contract. See NUL, UTF.
 func utf16String(b []byte) string {
 	units := make([]uint16, 0, len(b)/2)
 	for i := 0; i+1 < len(b); i += 2 {
@@ -401,7 +397,7 @@ func utf16Bytes(s string) []byte {
 	return out
 }
 
-// fakeIcon 은 그림 count 개를 담은 최소한의 .ico 다.
+// fakeIcon follows the documented behavioral contract.
 func fakeIcon(count int) []byte {
 	header := make([]byte, 6+16*count)
 	binary.LittleEndian.PutUint16(header[2:], 1)

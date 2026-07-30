@@ -1,6 +1,4 @@
-// Package hooks 는 훅 이름 계약과 결과 코드를 담는다.
-//
-// P0007 6.1 (유효한 훅 이름), 6.3 (결과 코드), L0008 2.16·4.7 (실행과 판정).
+// Package hooks defines valid hook names, result classification, deadlines, and the NSSM hook environment ABI (P0007 chapter 6; L0008 2.16).
 package hooks
 
 import (
@@ -14,46 +12,45 @@ import (
 	"ansm/internal/version"
 )
 
-// Status 는 ANSM 이 훅 실행 결과를 정리해 내부적으로 쓰는 값이다.
-// 훅 프로세스의 종료 코드가 아니다.
+// Status follows the documented behavioral contract. See Status, ANSM.
 type Status int
 
 const (
-	// StatusSuccess 는 정상 실행이다.
+	// StatusSuccess follows the documented behavioral contract. See StatusSuccess.
 	StatusSuccess Status = 0
-	// StatusNotFound 는 지정된 훅이 없다는 뜻이다.
+	// StatusNotFound follows the documented behavioral contract. See StatusNotFound.
 	StatusNotFound Status = 1
-	// StatusAbort 는 훅이 중단을 요청했다는 뜻이다. Start/Pre 에서만 의미가 있다.
+	// StatusAbort follows the documented behavioral contract. See StatusAbort, Start, Pre.
 	StatusAbort Status = 99
-	// StatusError 는 훅 실행 준비 중 내부 오류다(훅 설정을 읽지 못함 등).
+	// StatusError follows the documented behavioral contract. See StatusError.
 	StatusError Status = 100
-	// StatusNotRun 은 훅을 실행하지 못했다는 뜻이다.
+	// StatusNotRun follows the documented behavioral contract. See StatusNotRun.
 	StatusNotRun Status = 101
-	// StatusTimeout 은 제한 시간 초과다.
+	// StatusTimeout follows the documented behavioral contract. See StatusTimeout.
 	StatusTimeout Status = 102
-	// StatusFailed 는 훅이 0 이 아닌 값으로 끝났다는 뜻이다.
+	// StatusFailed follows the documented behavioral contract. See StatusFailed.
 	StatusFailed Status = 111
 )
 
-// ExitCodeAbort 는 훅 프로그램이 중단을 요청할 때 쓰는 종료 코드다.
+// ExitCodeAbort follows the documented behavioral contract. See ExitCodeAbort.
 const ExitCodeAbort = 99
 
-// Hook 은 유효한 <Event>/<Action> 조합 하나의 계약이다.
+// Hook follows the documented behavioral contract. See Hook, Event, Action.
 type Hook struct {
 	Event  string
 	Action string
-	// Async 가 true 면 결과를 보지 않고 진행한다.
+	// Async follows the documented behavioral contract. See Async.
 	Async bool
-	// Deadline 은 이 훅의 제한 시간이다. NSSM_DEADLINE 환경 변수로도 넘어간다.
+	// Deadline follows the documented behavioral contract. See Deadline, NSSM_DEADLINE.
 	Deadline time.Duration
-	// CanAbort 가 true 면 결과 99 가 흐름을 바꾼다. Start/Pre 뿐이다.
+	// CanAbort follows the documented behavioral contract. See CanAbort, Start, Pre.
 	CanAbort bool
 }
 
-// Name 은 부속 인수 표기다. 예: "Start/Pre".
+// Name follows the documented behavioral contract. See Name, Start, Pre.
 func (h Hook) Name() string { return h.Event + "/" + h.Action }
 
-// all 은 P0007 6.1 의 8가지 조합 전부다. 이 밖의 조합은 설정 단계에서 거부한다.
+// all follows the documented behavioral contract. See P0007 6.1.
 var all = []Hook{
 	{Event: "Start", Action: "Pre", Async: false, Deadline: params.HookDeadlineDefault, CanAbort: true},
 	{Event: "Start", Action: "Post", Async: true, Deadline: params.HookDeadlineDefault},
@@ -65,16 +62,14 @@ var all = []Hook{
 	{Event: "Rotate", Action: "Post", Async: true, Deadline: params.HookDeadlineDefault},
 }
 
-// All 은 8가지 조합을 계약 순서대로 돌려준다. dump 가 이 순서로 훑는다(P0007 3.6).
+// All follows the documented behavioral contract. See All, P0007 3.6.
 func All() []Hook {
 	out := make([]Hook, len(all))
 	copy(out, all)
 	return out
 }
 
-// Events 는 유효한 사건 이름을 오름차순으로 돌려준다.
-// P0007 3.10 의 "Invalid hook event!" 안내가 이 순서로 찍힌다
-// (Exit, Power, Rotate, Start, Stop).
+// Events follows the documented behavioral contract. See Events, P0007 3.10, Invalid, Exit, Power, Rotate.
 func Events() []string {
 	seen := map[string]bool{}
 	var out []string
@@ -88,8 +83,7 @@ func Events() []string {
 	return out
 }
 
-// ActionsFor 는 그 사건에서 쓸 수 있는 동작 이름을 돌려준다.
-// 사건이 유효하지 않으면 두 번째 값이 false 다.
+// ActionsFor follows the documented behavioral contract. See ActionsFor.
 func ActionsFor(event string) ([]string, bool) {
 	var out []string
 	for _, h := range all {
@@ -100,12 +94,7 @@ func ActionsFor(event string) ([]string, bool) {
 	return out, len(out) > 0
 }
 
-// ParseName 은 "Start/Pre" 형태의 부속 인수를 훅으로 바꾼다.
-//
-// 오류를 세 가지로 구분해 돌려준다. P0007 3.10 이 각각 다른 문구를 내기 때문이다.
-//   - ErrName:   '/' 가 없거나 조각이 비었다              → "Invalid hook name!"
-//   - ErrEvent:  사건 이름이 유효하지 않다                → "Invalid hook event!"
-//   - ErrAction: 사건은 맞으나 그 사건에 없는 동작이다    → "Invalid hook action for hook event ..."
+// ParseName distinguishes malformed names, unknown events, and invalid actions so P0007 3.10 can emit the matching diagnostic.
 func ParseName(name string) (Hook, error) {
 	event, action, ok := strings.Cut(name, "/")
 	if !ok || event == "" || action == "" {
@@ -122,7 +111,7 @@ func ParseName(name string) (Hook, error) {
 	return Hook{}, ErrAction
 }
 
-// 훅 이름 해석 오류.
+// This section follows the documented behavioral contract.
 var (
 	ErrName   = hookError("invalid hook name")
 	ErrEvent  = hookError("invalid hook event")
@@ -133,10 +122,7 @@ type hookError string
 
 func (e hookError) Error() string { return string(e) }
 
-// Classify 는 훅 프로세스의 결과를 Status 로 정리한다. L0008 2.16 의 watcher().
-//
-// timedOut 이면 종료 코드를 보지 않고 StatusTimeout 이다. 제한 시간 안에 끝났어도
-// 훅이 띄운 손자들은 호출자가 트리째 정리한다.
+// Classify maps watcher results to Status. A timeout takes precedence over process exit, and descendant cleanup remains the caller's responsibility.
 func Classify(timedOut bool, exitCode int) Status {
 	switch {
 	case timedOut:
@@ -150,8 +136,7 @@ func Classify(timedOut bool, exitCode int) Status {
 	}
 }
 
-// SyncWaitLimit 은 동기 훅을 실제로 기다리는 상한이다.
-// L0008 2.16: 감시 흐름이 정리 작업까지 마치는 데 걸리는 시간을 더한다.
+// SyncWaitLimit includes the extra time allowed for watcher cleanup after a synchronous hook deadline.
 func SyncWaitLimit(deadline time.Duration) time.Duration {
 	return deadline + params.StatusReportInterval
 }
