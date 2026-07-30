@@ -17,6 +17,10 @@ To show service installation GUI:
 
 	%[1]s install [<servicename>]
 
+To show the installation GUI directly, without the install verb:
+
+	%[1]s gui
+
 To install a service without confirmation:
 
 	%[1]s install <servicename> <app> [<args> ...]

@@ -228,6 +228,22 @@ func TestShortInstallAndRemoveFormsUseGUI(t *testing.T) {
 		})
 	}
 }
+func TestGuiCommandOpensInstallDialog(t *testing.T) {
+	m := managedFake()
+	env, _, _ := commandEnv([]string{"ansm.exe", "gui"}, m)
+	called := false
+	env.RunGUI = func(c cli.Command, args []string) int {
+		called = c.Name == "gui" && len(args) == 0
+		return 37
+	}
+	if code := runNamed(t, env, "gui"); code != 37 {
+		t.Fatalf("code=%d", code)
+	}
+	if !called {
+		t.Fatal("gui dialog was not called")
+	}
+}
+
 func TestInstallDialogElevatesBeforeOpening(t *testing.T) {
 	m := managedFake()
 	env, _, _ := commandEnv([]string{"ansm.exe", "install"}, m)

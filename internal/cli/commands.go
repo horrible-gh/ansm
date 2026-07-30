@@ -36,6 +36,7 @@ var commands = []Command{
 	{Name: "install", MinArgs: 0, Elevation: ElevateAlways, GUIWhenShort: true, Usage: "install [<servicename>] [<app> [<args> ...]]"},
 	{Name: "remove", MinArgs: 0, Elevation: ElevateAlways, GUIWhenShort: true, Usage: "remove [<servicename> [confirm]]"},
 	{Name: "edit", MinArgs: 1, Elevation: ElevateOnAccessDenied, AlwaysGUI: true, Usage: "edit <servicename>"},
+	{Name: "gui", MinArgs: 0, Elevation: ElevateAlways, AlwaysGUI: true, Usage: "gui"},
 	{Name: "get", MinArgs: 2, Elevation: ElevateOnAccessDenied, Usage: "get <servicename> <parameter> [<subparameter>]"},
 	{Name: "set", MinArgs: 3, Elevation: ElevateOnAccessDenied, Usage: "set <servicename> <parameter> [<subparameter>] <value>"},
 	{Name: "reset", MinArgs: 2, Elevation: ElevateOnAccessDenied, Usage: "reset <servicename> <parameter> [<subparameter>]"},

@@ -29,7 +29,7 @@ Build reproducible 64-bit and 32-bit distribution artifacts with:
 pwsh tools\dist.ps1
 ```
 
-The distribution script derives the version and build date from repository history and injects them through linker flags, so repeated builds of the same commit produce identical bytes.
+This single command already covers the full pipeline: it regenerates the versioned resource objects, builds both `amd64` and `386` executables, and reports their SHA-256 hashes. No separate `go build` or `go generate` step is needed. The distribution script derives the version and build date from repository history and injects them through linker flags, so repeated builds of the same commit produce identical bytes.
 
 ## Repository layout
 

@@ -40,6 +40,7 @@ func TestCommandTableMatchesContract(t *testing.T) {
 		"install":    {0, ElevateAlways},
 		"remove":     {0, ElevateAlways},
 		"edit":       {1, ElevateOnAccessDenied},
+		"gui":        {0, ElevateAlways},
 		"get":        {2, ElevateOnAccessDenied},
 		"set":        {3, ElevateOnAccessDenied},
 		"reset":      {2, ElevateOnAccessDenied},
@@ -117,7 +118,7 @@ func TestUsageUsesExeNameAndCRLF(t *testing.T) {
 		t.Error("usage contains a bare LF; must use Windows line endings")
 	}
 	// for follows the documented behavioral contract. See P0007 2.2.
-	for _, cmd := range []string{"install", "edit", "dump", "get", "set", "reset", "remove", "start", "stop", "restart", "status", "statuscode", "rotate", "processes"} {
+	for _, cmd := range []string{"install", "edit", "dump", "get", "set", "reset", "remove", "gui", "start", "stop", "restart", "status", "statuscode", "rotate", "processes"} {
 		if !strings.Contains(text, "myansm "+cmd) {
 			t.Errorf("usage is missing %q", cmd)
 		}
