@@ -86,5 +86,5 @@ func showUsage(env Env) {
 		fmt.Fprint(env.Stderr, text)
 		return
 	}
-	env.Gateway.ShowMessageBox("NSSM", text)
+	env.Gateway.ShowMessageBox(version.Product, text)
 }

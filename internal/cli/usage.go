@@ -8,7 +8,7 @@ import (
 )
 
 // usageTemplate follows the documented behavioral contract. See P0007 2.2, P0007, NSSM.
-const usageTemplate = `NSSM: The non-sucking service manager
+const usageTemplate = `ANSM: The non-sucking service manager (NSSM-compatible)
 Version %[2]s
 
 Usage: %[1]s <option> [<args> ...]

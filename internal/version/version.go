@@ -9,6 +9,11 @@ import (
 )
 
 var (
+	// Product is the user-facing application name shown in window titles,
+	// message boxes, and usage/version output. The registry layout, event
+	// log messages, and hook ABI stay NSSM for compatibility and are not
+	// affected by this constant.
+	Product = "ANSM"
 	// This section follows the documented behavioral contract. See Number, NSSM_VERSION.
 	Number = "2.24-101-g897c7ad"
 	// This section follows the documented behavioral contract. See BuildDate, NSSM_BUILD_DATE.
@@ -27,7 +32,7 @@ func Configuration() string {
 
 // String follows the documented behavioral contract. See String.
 func String() string {
-	return fmt.Sprintf("NSSM %s %s %s", Number, Configuration(), BuildDate)
+	return fmt.Sprintf("%s %s %s %s", Product, Number, Configuration(), BuildDate)
 }
 
 // Numeric follows the documented behavioral contract. See Numeric, Number.
