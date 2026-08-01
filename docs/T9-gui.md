@@ -55,8 +55,39 @@ registry or SCM contract.
 UAC behavior remains part of command dispatch. Install and remove elevate before the
 window opens; edit retries elevated only when opening the service returns access denied.
 
+## Window identity and file pickers
+
+B0001 found three gaps in the ported dialogs that the original "does the template have
+controls" tests did not catch: the window title was still literally `NSSM service
+installer/editor/remover`, the main dialog never set its own icon, and none of the six
+path fields (application path, startup directory, stdin, stdout, stderr, hook command)
+had a way to browse for a file or folder.
+
+- **Branding.** `internal/version.Product` ("ANSM") is now the single source for the
+  window title, all six message-box captions, `ansm --version`, and the packaged
+  VERSIONINFO strings (`tools/mkrsrc`). Registry layout, event-log messages, and the
+  hook environment ABI are untouched and remain NSSM-compatible by design.
+- **Window icon.** `setWindowIcon` runs on `WM_INITDIALOG` and loads the embedded
+  `RT_GROUP_ICON` resource (ID 101, see `tools/mkrsrc/main.go`) at the big/small sizes
+  reported by `GetSystemMetrics(SM_CXICON/SM_CXSMICON)`, then applies it with
+  `WM_SETICON`. Dialogs built from an in-memory `DLGTEMPLATE` never get an icon for
+  free; this was the actual cause behind the "old icon" report, since the icon asset
+  itself had already been replaced.
+- **Browse buttons.** Each of the six path fields now has a `...` push button
+  (control IDs 1103/1104, 1174-1176, 1203 -- chosen to avoid the 1/2 range reserved for
+  IDOK/IDCANCEL). Application path, stdin, and hook command require an existing file
+  (`OFN_FILEMUSTEXIST`); stdout and stderr do not, since a service may be pointed at a
+  log file that does not exist yet. Startup directory uses `SHBrowseForFolderW`
+  without `BIF_NEWDIALOGSTYLE`, deliberately avoiding the COM initialization that
+  style requires -- this process never calls `CoInitialize`. Filter and title strings
+  are plain English literals for now; wiring them to the existing but unused
+  `NSSM_GUI_BROWSE_*` catalog entries is left for a later pass.
+
 ## Verification
 
 The pure form tests cover tab order, install persistence and rollback, unchanged account
 handling, password confirmation, and environment validation. Windows-only tests inspect
-each generated template and assert that both package-level callbacks exist.
+each generated template and assert that both package-level callbacks exist, that the
+main dialog title carries the current product name instead of a hardcoded string, and
+that each of the six path fields' browse button control IDs are present in its page
+template.

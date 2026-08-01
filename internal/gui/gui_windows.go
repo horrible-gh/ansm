@@ -14,6 +14,7 @@ import (
 	"ansm/internal/exitaction"
 	"ansm/internal/hooks"
 	"ansm/internal/platform"
+	"ansm/internal/version"
 )
 
 const (
@@ -105,6 +106,33 @@ const (
 	idHookName                  = 1200
 	idHookCommand               = 1201
 	idRedirectHook              = 1202
+	idApplicationBrowse         = 1103
+	idDirectoryBrowse           = 1104
+	idStdinBrowse               = 1174
+	idStdoutBrowse              = 1175
+	idStderrBrowse              = 1176
+	idHookCommandBrowse         = 1203
+)
+
+const (
+	wmSetIcon  = 0x0080
+	iconSmall  = 0
+	iconBig    = 1
+	imageIcon  = 1
+	smCxIcon   = 11
+	smCyIcon   = 12
+	smCxSmIcon = 49
+	smCySmIcon = 50
+	// appIconGroup matches groupIconName in tools/mkrsrc/main.go.
+	appIconGroup = 101
+
+	ofnExplorer      = 0x00080000
+	ofnHideReadOnly  = 0x00000004
+	ofnNoChangeDir   = 0x00000008
+	ofnFileMustExist = 0x00001000
+	ofnPathMustExist = 0x00000800
+
+	bifReturnOnlyFSDirs = 0x00000001
 )
 
 var (
@@ -124,6 +152,15 @@ var (
 	procMessageBoxW                = user32.NewProc("MessageBoxW")
 	procGetModuleHandleW           = kernel32.NewProc("GetModuleHandleW")
 	procInitCommonControlsEx       = comctl32.NewProc("InitCommonControlsEx")
+	comdlg32                       = syscall.NewLazyDLL("comdlg32.dll")
+	shell32                        = syscall.NewLazyDLL("shell32.dll")
+	ole32                          = syscall.NewLazyDLL("ole32.dll")
+	procGetSystemMetrics           = user32.NewProc("GetSystemMetrics")
+	procLoadImageW                 = user32.NewProc("LoadImageW")
+	procGetOpenFileNameW           = comdlg32.NewProc("GetOpenFileNameW")
+	procSHBrowseForFolderW         = shell32.NewProc("SHBrowseForFolderW")
+	procSHGetPathFromIDListW       = shell32.NewProc("SHGetPathFromIDListW")
+	procCoTaskMemFree              = ole32.NewProc("CoTaskMemFree")
 	mainCallback                   = syscall.NewCallback(mainDialogProc)
 	pageCallback                   = syscall.NewCallback(pageDialogProc)
 	dialogMu                       sync.Mutex
@@ -167,7 +204,7 @@ func (r *Runner) Run(command string, args []string) int {
 		return 1
 	}
 	if err != nil {
-		messageBox(0, "NSSM", err.Error(), mbOK|mbIconError)
+		messageBox(0, version.Product, err.Error(), mbOK|mbIconError)
 		return platform.ExitCode(err, 1)
 	}
 	s := &session{runner: r, form: f, result: 0, selectedHook: hooks.All()[0].Name()}
@@ -194,7 +231,7 @@ func (s *session) show() int {
 	pending = nil
 	runtime.KeepAlive(tmpl)
 	if ret == ^uintptr(0) {
-		messageBox(0, "NSSM", fmt.Sprintf("Could not create dialog: %v", e), mbOK|mbIconError)
+		messageBox(0, version.Product, fmt.Sprintf("Could not create dialog: %v", e), mbOK|mbIconError)
 		return 1
 	}
 	return s.result
@@ -203,6 +240,24 @@ func (s *session) show() int {
 func initControls() {
 	data := [2]uint32{8, 0x00000008}
 	procInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&data[0])))
+}
+
+// setWindowIcon attaches the embedded application icon (RT_GROUP_ICON 101,
+// see tools/mkrsrc/main.go) to hwnd. Without this, dialogs built from an
+// in-memory DLGTEMPLATE never receive an icon and Windows falls back to the
+// generic application icon in the title bar, Alt+Tab, and the taskbar.
+func setWindowIcon(hwnd uintptr) {
+	h, _, _ := procGetModuleHandleW.Call(0)
+	cxBig, _, _ := procGetSystemMetrics.Call(smCxIcon)
+	cyBig, _, _ := procGetSystemMetrics.Call(smCyIcon)
+	cxSmall, _, _ := procGetSystemMetrics.Call(smCxSmIcon)
+	cySmall, _, _ := procGetSystemMetrics.Call(smCySmIcon)
+	if big, _, _ := procLoadImageW.Call(h, appIconGroup, imageIcon, cxBig, cyBig, 0); big != 0 {
+		procSendMessageW.Call(hwnd, wmSetIcon, iconBig, big)
+	}
+	if small, _, _ := procLoadImageW.Call(h, appIconGroup, imageIcon, cxSmall, cySmall, 0); small != 0 {
+		procSendMessageW.Call(hwnd, wmSetIcon, iconSmall, small)
+	}
 }
 
 type nmhdr struct {
@@ -230,6 +285,7 @@ func mainDialogProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		}
 		s.main = hwnd
 		sessions[hwnd] = s
+		setWindowIcon(hwnd)
 		s.initDialog()
 		return 1
 	case wmNotify:
@@ -258,6 +314,24 @@ func mainDialogProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 			case idCancelButton:
 				s.result = 0
 				procEndDialog.Call(hwnd, 0)
+				return 1
+			case idApplicationBrowse:
+				s.browseFile(s.pageHandles[0], idApplication, []string{"Applications (*.exe)", "*.exe", "All files (*.*)", "*.*"}, "Locate application file", true)
+				return 1
+			case idDirectoryBrowse:
+				s.browseFolder(s.pageHandles[0], idDirectory, "Select startup directory")
+				return 1
+			case idStdinBrowse:
+				s.browseFile(s.pageHandles[7], idStdin, []string{"All files (*.*)", "*.*"}, "Select input file", true)
+				return 1
+			case idStdoutBrowse:
+				s.browseFile(s.pageHandles[7], idStdout, []string{"All files (*.*)", "*.*"}, "Select output file", false)
+				return 1
+			case idStderrBrowse:
+				s.browseFile(s.pageHandles[7], idStderr, []string{"All files (*.*)", "*.*"}, "Select error file", false)
+				return 1
+			case idHookCommandBrowse:
+				s.browseFile(s.pageHandles[10], idHookCommand, []string{"All files (*.*)", "*.*"}, "Locate hook command", true)
 				return 1
 			}
 		}
@@ -588,16 +662,16 @@ func errorsText(s string) error   { return textError(s) }
 
 func (s *session) accept() {
 	if err := s.collect(); err != nil {
-		messageBox(s.main, "NSSM", err.Error(), mbOK|mbIconError)
+		messageBox(s.main, version.Product, err.Error(), mbOK|mbIconError)
 		return
 	}
 	if s.form.Mode == Remove {
-		if messageBox(s.main, "NSSM", fmt.Sprintf("Remove service %q?", s.form.Name), mbYesNo|mbIconInfo) != idYes {
+		if messageBox(s.main, version.Product, fmt.Sprintf("Remove service %q?", s.form.Name), mbYesNo|mbIconInfo) != idYes {
 			return
 		}
 	}
 	if err := s.form.Save(s.runner.manager); err != nil {
-		messageBox(s.main, "NSSM", err.Error(), mbOK|mbIconError)
+		messageBox(s.main, version.Product, err.Error(), mbOK|mbIconError)
 		return
 	}
 	verb := "updated"
@@ -606,7 +680,7 @@ func (s *session) accept() {
 	} else if s.form.Mode == Remove {
 		verb = "removed"
 	}
-	messageBox(s.main, "NSSM", fmt.Sprintf("Service %q %s successfully!", s.form.Name, verb), mbOK|mbIconInfo)
+	messageBox(s.main, version.Product, fmt.Sprintf("Service %q %s successfully!", s.form.Name, verb), mbOK|mbIconInfo)
 	s.result = 0
 	delete(sessions, s.main)
 	procEndDialog.Call(s.main, 0)
@@ -678,6 +752,118 @@ func messageBox(parent uintptr, title, body string, flags uintptr) int {
 	b, _ := syscall.UTF16PtrFromString(body)
 	r, _, _ := procMessageBoxW.Call(parent, uintptr(unsafe.Pointer(b)), uintptr(unsafe.Pointer(t)), flags)
 	return int(r)
+}
+
+// openFileNameW mirrors the Win32 OPENFILENAMEW struct field for field so
+// its size and layout match what GetOpenFileNameW expects.
+type openFileNameW struct {
+	lStructSize       uint32
+	hwndOwner         uintptr
+	hInstance         uintptr
+	lpstrFilter       *uint16
+	lpstrCustomFilter *uint16
+	nMaxCustFilter    uint32
+	nFilterIndex      uint32
+	lpstrFile         *uint16
+	nMaxFile          uint32
+	lpstrFileTitle    *uint16
+	nMaxFileTitle     uint32
+	lpstrInitialDir   *uint16
+	lpstrTitle        *uint16
+	flags             uint32
+	nFileOffset       uint16
+	nFileExtension    uint16
+	lpstrDefExt       *uint16
+	lCustData         uintptr
+	lpfnHook          uintptr
+	lpTemplateName    *uint16
+	pvReserved        uintptr
+	dwReserved        uint32
+	flagsEx           uint32
+}
+
+// browseInfoW mirrors the Win32 BROWSEINFOW struct used by SHBrowseForFolderW.
+type browseInfoW struct {
+	hwndOwner      uintptr
+	pidlRoot       uintptr
+	pszDisplayName *uint16
+	lpszTitle      *uint16
+	ulFlags        uint32
+	lpfn           uintptr
+	lParam         uintptr
+	iImage         int32
+}
+
+// filterString builds a GetOpenFileNameW filter buffer: alternating
+// description/pattern pairs, each NUL-terminated, with a final extra NUL.
+func filterString(pairs ...string) *uint16 {
+	var buf []uint16
+	for _, p := range pairs {
+		u, _ := syscall.UTF16FromString(p)
+		buf = append(buf, u...)
+	}
+	buf = append(buf, 0)
+	return &buf[0]
+}
+
+// browseFile shows the standard Open dialog and writes the chosen path into
+// the edit control identified by id on the given page. mustExist adds
+// OFN_FILEMUSTEXIST/OFN_PATHMUSTEXIST; callers pass false for stdout/stderr
+// since those fields may legitimately name a file that does not exist yet.
+func (s *session) browseFile(page uintptr, id int, filterPairs []string, title string, mustExist bool) {
+	buf := make([]uint16, 32768)
+	if u, err := syscall.UTF16FromString(getText(page, id)); err == nil {
+		copy(buf, u)
+	}
+	filter := filterString(filterPairs...)
+	titlePtr, _ := syscall.UTF16PtrFromString(title)
+	ofn := openFileNameW{}
+	ofn.lStructSize = uint32(unsafe.Sizeof(ofn))
+	ofn.hwndOwner = s.main
+	ofn.lpstrFilter = filter
+	ofn.lpstrFile = &buf[0]
+	ofn.nMaxFile = uint32(len(buf))
+	ofn.lpstrTitle = titlePtr
+	ofn.flags = ofnExplorer | ofnHideReadOnly | ofnNoChangeDir
+	if mustExist {
+		ofn.flags |= ofnFileMustExist | ofnPathMustExist
+	}
+	ret, _, _ := procGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
+	runtime.KeepAlive(buf)
+	runtime.KeepAlive(filter)
+	runtime.KeepAlive(titlePtr)
+	if ret == 0 {
+		return
+	}
+	setText(page, id, syscall.UTF16ToString(buf))
+}
+
+// browseFolder shows a folder picker and writes the chosen directory into
+// the edit control identified by id on the given page. It deliberately
+// omits BIF_NEWDIALOGSTYLE: that style requires COM to be initialized on the
+// calling thread, and this process never calls CoInitialize.
+func (s *session) browseFolder(page uintptr, id int, title string) {
+	titlePtr, _ := syscall.UTF16PtrFromString(title)
+	display := make([]uint16, 260)
+	bi := browseInfoW{}
+	bi.hwndOwner = s.main
+	bi.pszDisplayName = &display[0]
+	bi.lpszTitle = titlePtr
+	bi.ulFlags = bifReturnOnlyFSDirs
+	pidl, _, _ := procSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&bi)))
+	runtime.KeepAlive(display)
+	runtime.KeepAlive(titlePtr)
+	if pidl == 0 {
+		return
+	}
+	defer procCoTaskMemFree.Call(pidl)
+	buf := make([]uint16, 32768)
+	ok, _, _ := procSHGetPathFromIDListW.Call(pidl, uintptr(unsafe.Pointer(&buf[0])))
+	runtime.KeepAlive(buf)
+	if ok == 0 {
+		return
+	}
+	setText(page, id, syscall.UTF16ToString(buf))
 }
 
 type dialogBuilder struct {
@@ -778,15 +964,18 @@ func combo(b *dialogBuilder, id uint16, x, y, cx, cy int16) {
 func checkbox(b *dialogBuilder, id uint16, text string, x, y, cx, cy int16) {
 	b.item(wsChild|wsVisible|wsTabStop|bsAutoCheckBox, 0, x, y, cx, cy, id, classButton, text)
 }
+func pushButton(b *dialogBuilder, id uint16, text string, x, y, cx, cy int16) {
+	b.item(wsChild|wsVisible|wsTabStop, 0, x, y, cx, cy, id, classButton, text)
+}
 
 func mainTemplate(mode Mode) []byte {
-	title := "NSSM service installer"
+	title := version.Product + " service installer"
 	action := "Install service"
 	if mode == Edit {
-		title = "NSSM service editor"
+		title = version.Product + " service editor"
 		action = "Edit service"
 	} else if mode == Remove {
-		title = "NSSM service remover"
+		title = version.Product + " service remover"
 		action = "Remove service"
 	}
 	if mode == Remove {
@@ -811,9 +1000,11 @@ func pageTemplate(index int) []byte {
 	switch index {
 	case 0:
 		static(b, "Application path:", 8, 12, 75, 10)
-		edit(b, idApplication, 88, 9, 338, 14, 0)
+		edit(b, idApplication, 88, 9, 314, 14, 0)
+		pushButton(b, idApplicationBrowse, "...", 406, 9, 20, 14)
 		static(b, "Startup directory:", 8, 38, 75, 10)
-		edit(b, idDirectory, 88, 35, 338, 14, 0)
+		edit(b, idDirectory, 88, 35, 314, 14, 0)
+		pushButton(b, idDirectoryBrowse, "...", 406, 35, 20, 14)
 		static(b, "Arguments:", 8, 64, 75, 10)
 		edit(b, idArguments, 88, 61, 338, 14, 0)
 	case 1:
@@ -861,11 +1052,14 @@ func pageTemplate(index int) []byte {
 		edit(b, idRestartDelay, 115, 69, 90, 14, esNumber)
 	case 7:
 		static(b, "Input (stdin):", 8, 12, 65, 10)
-		edit(b, idStdin, 78, 9, 348, 14, 0)
+		edit(b, idStdin, 78, 9, 324, 14, 0)
+		pushButton(b, idStdinBrowse, "...", 406, 9, 20, 14)
 		static(b, "Output (stdout):", 8, 38, 65, 10)
-		edit(b, idStdout, 78, 35, 348, 14, 0)
+		edit(b, idStdout, 78, 35, 324, 14, 0)
+		pushButton(b, idStdoutBrowse, "...", 406, 35, 20, 14)
 		static(b, "Error (stderr):", 8, 64, 65, 10)
-		edit(b, idStderr, 78, 61, 348, 14, 0)
+		edit(b, idStderr, 78, 61, 324, 14, 0)
+		pushButton(b, idStderrBrowse, "...", 406, 61, 20, 14)
 		checkbox(b, idTimestamp, "Timestamp log lines", 78, 88, 130, 12)
 	case 8:
 		checkbox(b, idTruncate, "Replace existing output/error files", 8, 10, 220, 12)
@@ -883,7 +1077,8 @@ func pageTemplate(index int) []byte {
 		static(b, "Event/action:", 8, 12, 70, 10)
 		combo(b, idHookName, 82, 9, 180, 100)
 		static(b, "Command:", 8, 42, 70, 10)
-		edit(b, idHookCommand, 82, 39, 344, 14, 0)
+		edit(b, idHookCommand, 82, 39, 320, 14, 0)
+		pushButton(b, idHookCommandBrowse, "...", 406, 39, 20, 14)
 		checkbox(b, idRedirectHook, "Redirect output from hooks", 8, 70, 180, 12)
 	}
 	return b.bytes()

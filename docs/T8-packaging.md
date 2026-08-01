@@ -57,7 +57,7 @@ Generated resources are:
 | Resource | Contents |
 |---|---|
 | Three MESSAGETABLE resources | All 205 English, French, and Italian messages |
-| Four ICON resources plus GROUP_ICON | Original NSSM icon |
+| Three ICON resources plus GROUP_ICON | Current ANSM icon (16/32/48 px), replacing the original NSSM icon committed here |
 | VERSION | Version, build configuration, build date, and Translation entries for all three languages |
 | MANIFEST | NSSM-compatible `asInvoker` execution level |
 
