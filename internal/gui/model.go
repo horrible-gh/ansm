@@ -167,7 +167,11 @@ func (f *Form) Validate() error {
 		}
 	}
 	account := f.Text("ObjectName")
-	if account != "" && !strings.EqualFold(account, "LocalSystem") && !strings.HasPrefix(strings.ToLower(account), `nt service\`) {
+	special := strings.EqualFold(account, "LocalSystem") ||
+		strings.EqualFold(account, `NT Authority\LocalService`) ||
+		strings.EqualFold(account, `NT Authority\NetworkService`) ||
+		strings.HasPrefix(strings.ToLower(account), `nt service\`)
+	if account != "" && !special {
 		unchanged := f.Mode == Edit && strings.EqualFold(account, f.Original[Key{Name: "ObjectName"}].Text)
 		if (!unchanged || f.Password != "" || f.Confirm != "") && (f.Password == "" || f.Password != f.Confirm) {
 			return errors.New("password and confirmation must match")

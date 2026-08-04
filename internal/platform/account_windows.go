@@ -15,6 +15,7 @@ var (
 	procLsaAddAccountRights   = advapi32.NewProc("LsaAddAccountRights")
 	procLsaNtStatusToWinError = advapi32.NewProc("LsaNtStatusToWinError")
 	procLsaClose              = advapi32.NewProc("LsaClose")
+	procGetComputerNameExW    = kernel32.NewProc("GetComputerNameExW")
 )
 
 type lsaObjectAttributes struct {
@@ -37,9 +38,42 @@ func specialServiceAccount(service, account string) bool {
 		strings.EqualFold(account, `NT Service\`+service)
 }
 
+// normalizeAccountName expands a ".\accountname" shorthand (the local
+// computer prefix accepted by CreateServiceW/ChangeServiceConfigW, and the
+// form Windows' own service properties dialog and nssm both accept) into
+// "COMPUTERNAME\accountname", which is what LookupAccountNameW requires.
+// Any other account string is returned unchanged.
+func normalizeAccountName(account string) string {
+	if !strings.HasPrefix(account, `.\`) {
+		return account
+	}
+	computer, err := localComputerName()
+	if err != nil || computer == "" {
+		return account
+	}
+	return computer + account[1:]
+}
+
+const computerNameNetBIOS = 0
+
+func localComputerName() (string, error) {
+	var size uint32
+	procGetComputerNameExW.Call(computerNameNetBIOS, 0, uintptr(unsafe.Pointer(&size)))
+	if size == 0 {
+		return "", syscall.EINVAL
+	}
+	buf := make([]uint16, size)
+	r, _, e := procGetComputerNameExW.Call(computerNameNetBIOS, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)))
+	if r == 0 {
+		return "", e
+	}
+	return syscall.UTF16ToString(buf[:size]), nil
+}
+
 // grantLogonAsService validates the account and grants SeServiceLogonRight.
 // LsaAddAccountRights is idempotent, so a separate enumerate call is unnecessary.
 func grantLogonAsService(account string) error {
+	account = normalizeAccountName(account)
 	name, err := syscall.UTF16PtrFromString(account)
 	if err != nil {
 		return err
