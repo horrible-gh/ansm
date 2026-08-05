@@ -54,9 +54,34 @@ func TestNextTakesLargerOfDelayAndThrottle(t *testing.T) {
 	}
 }
 
-func TestNextAlwaysReportsThrottled(t *testing.T) {
-	// for follows the documented behavioral contract. See L0008 5.9.
-	for previous := 1; previous < 5; previous++ {
+// TestNextReportsRestartDelayOnTheFirstRestartAfterAHealthyRun pins defect B:
+// previous == 1 is exactly the value AfterHealthyStart returns when
+// AppRestartDelay is set, so that combination must surface as a restart
+// delay, not as throttling.
+func TestNextReportsRestartDelayOnTheFirstRestartAfterAHealthyRun(t *testing.T) {
+	p := Next(AfterHealthyStart(time.Minute), time.Minute)
+	if p.Count != 2 {
+		t.Errorf("Count = %d, want 2", p.Count)
+	}
+	if p.Wait != time.Minute {
+		t.Errorf("Wait = %v, want 1m", p.Wait)
+	}
+	if !p.RestartDelayed {
+		t.Error("RestartDelayed = false, want true")
+	}
+	if p.Throttled {
+		t.Error("Throttled = true, want false")
+	}
+}
+
+// TestNextReportsThrottledForRepeatedFailures replaces
+// TestNextAlwaysReportsThrottled, which pinned defect B (count == 1 could
+// never be reached, so RestartDelayed was permanently dead code) as the
+// intended behavior. Repeated failures (previous >= 2) must still report
+// Throttled, and previous == 1 with a restart delay shorter than the
+// throttle wait must also report Throttled rather than RestartDelayed.
+func TestNextReportsThrottledForRepeatedFailures(t *testing.T) {
+	for previous := 2; previous < 6; previous++ {
 		p := Next(previous, time.Minute)
 		if p.RestartDelayed {
 			t.Errorf("Next(%d) RestartDelayed = true, want false", previous)
@@ -64,6 +89,16 @@ func TestNextAlwaysReportsThrottled(t *testing.T) {
 		if !p.Throttled {
 			t.Errorf("Next(%d) Throttled = false, want true", previous)
 		}
+	}
+	// previous == 1 but the administrator's restart delay (500ms) is shorter
+	// than the throttle wait (Delay(2) == 2000ms): still throttling, not a
+	// restart delay.
+	p := Next(1, 500*time.Millisecond)
+	if p.RestartDelayed {
+		t.Error("RestartDelayed = true, want false")
+	}
+	if !p.Throttled {
+		t.Error("Throttled = false, want true")
 	}
 }
 

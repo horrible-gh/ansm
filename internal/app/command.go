@@ -573,7 +573,11 @@ func controlCommand(env Env, name string, args []string) int {
 	case "start":
 		state, err = env.Manager.StartService(service, args[1:])
 	case "restart":
-		if _, err = env.Manager.SendControl(service, control.Stop); err == nil {
+		// A stop that fails because the service is already stopped is not a
+		// reason to skip the start: restart's contract is "end up running",
+		// and the SCM reports an idle service as ERROR_SERVICE_NOT_ACTIVE.
+		_, err = env.Manager.SendControl(service, control.Stop)
+		if err == nil || platform.IsServiceNotActive(err) {
 			state, err = env.Manager.StartService(service, nil)
 		}
 	case "stop":

@@ -69,6 +69,33 @@ func TestInstallUsesShellValuesAndPersistsExtras(t *testing.T) {
 	}
 	t.Fatalf("writes=%v", m.writes)
 }
+
+// A fresh install resets AppExit/Default, because NewForm seeds it with the
+// same "Restart" the setting already defaults to. That reset is the step that
+// used to fail: the registry delete succeeded but reported ERROR_SUCCESS as an
+// error, so Save rolled the new service back and the window showed "write
+// AppExit/Default: The operation completed successfully.". A delete that
+// succeeds must leave the service installed.
+func TestInstallResetsAppExitDefaultWithoutRollingBack(t *testing.T) {
+	m := &fakeManager{values: map[Key]platform.Value{}}
+	f := NewForm(`C:\tools\ansm.exe`, "Worker")
+	_ = f.SetText("Application", "", `C:\app\worker.exe`)
+	if err := f.Save(m); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+	var reset bool
+	for _, key := range m.deletes {
+		if key.Name == "AppExit" && key.Sub == "Default" {
+			reset = true
+		}
+	}
+	if !reset {
+		t.Fatalf("AppExit/Default was not reset: deletes=%v", m.deletes)
+	}
+	if len(m.removed) != 0 {
+		t.Fatalf("a successful install was rolled back: removed=%v", m.removed)
+	}
+}
 func TestInstallRollsBackAfterSettingFailure(t *testing.T) {
 	m := &fakeManager{values: map[Key]platform.Value{}, writeErr: errors.New("denied")}
 	f := NewForm(`C:\tools\ansm.exe`, "Worker")

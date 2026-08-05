@@ -157,6 +157,7 @@ var (
 	ole32                          = syscall.NewLazyDLL("ole32.dll")
 	procGetSystemMetrics           = user32.NewProc("GetSystemMetrics")
 	procLoadImageW                 = user32.NewProc("LoadImageW")
+	procDestroyIcon                = user32.NewProc("DestroyIcon")
 	procGetOpenFileNameW           = comdlg32.NewProc("GetOpenFileNameW")
 	procSHBrowseForFolderW         = shell32.NewProc("SHBrowseForFolderW")
 	procSHGetPathFromIDListW       = shell32.NewProc("SHGetPathFromIDListW")
@@ -223,6 +224,8 @@ type session struct {
 	pageHandles  []uintptr
 	result       int
 	selectedHook string
+	iconBig      uintptr
+	iconSmall    uintptr
 }
 
 func (s *session) show() int { return s.showOwned(0) }
@@ -240,6 +243,15 @@ func (s *session) showOwned(owner uintptr) int {
 	ret, _, e := procDialogBoxIndirectParamW.Call(h, uintptr(unsafe.Pointer(&tmpl[0])), owner, mainCallback, 0)
 	pending = nil
 	runtime.KeepAlive(tmpl)
+	// The window is destroyed by the time DialogBoxIndirectParamW returns, so
+	// this is the one place that covers every exit path (save, cancel, X,
+	// error) for both the icon handles and this session's page registrations.
+	destroyWindowIcons(s.iconBig, s.iconSmall)
+	s.iconBig, s.iconSmall = 0, 0
+	for _, p := range s.pageHandles {
+		delete(pages, p)
+	}
+	s.pageHandles = nil
 	if ret == ^uintptr(0) {
 		messageBox(0, version.Product, fmt.Sprintf("Could not create dialog: %v", e), mbOK|mbIconError)
 		return 1
@@ -258,17 +270,37 @@ func initControls() {
 // see tools/mkrsrc/main.go) to hwnd. Without this, dialogs built from an
 // in-memory DLGTEMPLATE never receive an icon and Windows falls back to the
 // generic application icon in the title bar, Alt+Tab, and the taskbar.
-func setWindowIcon(hwnd uintptr) {
+//
+// LoadImageW is called without LR_SHARED, so each returned handle is owned by
+// the caller: the caller must hold onto big and small and release them with
+// destroyWindowIcons once the window that displays them is gone. A handle is
+// 0 when the matching LoadImageW call failed.
+func setWindowIcon(hwnd uintptr) (big, small uintptr) {
 	h, _, _ := procGetModuleHandleW.Call(0)
 	cxBig, _, _ := procGetSystemMetrics.Call(smCxIcon)
 	cyBig, _, _ := procGetSystemMetrics.Call(smCyIcon)
 	cxSmall, _, _ := procGetSystemMetrics.Call(smCxSmIcon)
 	cySmall, _, _ := procGetSystemMetrics.Call(smCySmIcon)
-	if big, _, _ := procLoadImageW.Call(h, appIconGroup, imageIcon, cxBig, cyBig, 0); big != 0 {
+	big, _, _ = procLoadImageW.Call(h, appIconGroup, imageIcon, cxBig, cyBig, 0)
+	if big != 0 {
 		procSendMessageW.Call(hwnd, wmSetIcon, iconBig, big)
 	}
-	if small, _, _ := procLoadImageW.Call(h, appIconGroup, imageIcon, cxSmall, cySmall, 0); small != 0 {
+	small, _, _ = procLoadImageW.Call(h, appIconGroup, imageIcon, cxSmall, cySmall, 0)
+	if small != 0 {
 		procSendMessageW.Call(hwnd, wmSetIcon, iconSmall, small)
+	}
+	return big, small
+}
+
+// destroyWindowIcons releases the handles setWindowIcon returned. It is
+// called once, after the window that displayed them has been destroyed, since
+// WM_SETICON does not release the icon it replaces.
+func destroyWindowIcons(big, small uintptr) {
+	if big != 0 {
+		procDestroyIcon.Call(big)
+	}
+	if small != 0 {
+		procDestroyIcon.Call(small)
 	}
 }
 
@@ -297,7 +329,7 @@ func mainDialogProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		}
 		s.main = hwnd
 		sessions[hwnd] = s
-		setWindowIcon(hwnd)
+		s.iconBig, s.iconSmall = setWindowIcon(hwnd)
 		s.initDialog()
 		return 1
 	case wmNotify:

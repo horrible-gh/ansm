@@ -45,7 +45,10 @@ func Next(previous int, restartDelay time.Duration) Plan {
 	}
 
 	plan := Plan{Count: count, Wait: wait}
-	if count == 1 && restartDelay > throttled {
+	// previous == 1 is what AfterHealthyStart returns when AppRestartDelay is
+	// set, so this is the first restart after a healthy run: the wait comes
+	// from the administrator's restart delay, not from throttling.
+	if previous == 1 && restartDelay > throttled {
 		plan.RestartDelayed = true
 	} else {
 		plan.Throttled = true

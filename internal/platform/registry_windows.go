@@ -159,11 +159,21 @@ func deleteRegistryValue(path, name string) error {
 		return err
 	}
 	r, _, _ := procRegDeleteValueW.Call(uintptr(h), uintptr(unsafe.Pointer(n)))
-	err = syscall.Errno(r)
-	if errors.Is(err, syscall.ERROR_FILE_NOT_FOUND) {
+	return registryValueDeleteResult(r)
+}
+
+// registryValueDeleteResult turns the LSTATUS that RegDeleteValueW returns
+// into an error. The zero status is ERROR_SUCCESS and has to be recognised
+// before the status is wrapped: syscall.Errno(0) held in an error interface is
+// not nil, and its message is "The operation completed successfully.", so a
+// delete that worked reaches the caller as a failure. A value that is already
+// gone is success for this operation too. createRegistryKey, writeRegistryValue
+// and deleteRegistryTree test the status the same way.
+func registryValueDeleteResult(r uintptr) error {
+	if r == 0 || syscall.Errno(r) == syscall.ERROR_FILE_NOT_FOUND {
 		return nil
 	}
-	return err
+	return syscall.Errno(r)
 }
 
 func deleteRegistryTree(path string) error {

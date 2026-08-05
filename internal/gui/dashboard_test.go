@@ -22,6 +22,7 @@ type dashFake struct {
 	queryErr map[string]error
 	sent     []string
 	sendErr  error
+	startErr error
 }
 
 func (m *dashFake) InstallService(platform.InstallSpec) error { return nil }
@@ -50,7 +51,7 @@ func (m *dashFake) WriteSetting(string, settings.Setting, string, platform.Value
 func (m *dashFake) DeleteSetting(string, settings.Setting, string) error { return nil }
 func (m *dashFake) StartService(name string, _ []string) (control.State, error) {
 	m.sent = append(m.sent, name+":START")
-	return control.Running, m.sendErr
+	return control.Running, m.startErr
 }
 func (m *dashFake) SendControl(name string, c control.Code) (control.State, error) {
 	m.sent = append(m.sent, name+":"+c.Name())
@@ -148,8 +149,9 @@ func TestListRowsHandlesAnEmptyEnumeration(t *testing.T) {
 }
 
 // TestControlRestartStopsThenStarts pins the parity with `ansm restart`: the
-// SCM has no restart control, so it is a stop followed by a start, and a
-// failed stop must not be followed by a start.
+// SCM has no restart control, so it is a stop followed by a start, and a stop
+// that fails for a reason other than the service already being stopped must
+// not be followed by a start.
 func TestControlRestartStopsThenStarts(t *testing.T) {
 	m := listFake()
 	if _, err := Control(m, ActionRestart, "Alpha"); err != nil {
@@ -166,6 +168,15 @@ func TestControlRestartStopsThenStarts(t *testing.T) {
 	}
 	if len(m.sent) != 1 {
 		t.Fatalf("calls = %v, want the start to be skipped", m.sent)
+	}
+
+	m = listFake()
+	m.sendErr = &platform.Error{Code: 1, Op: "control service", Err: platform.ErrServiceNotActive}
+	if _, err := Control(m, ActionRestart, "Alpha"); err != nil {
+		t.Fatalf("expected an already-stopped service to still start, got %v", err)
+	}
+	if want := []string{"Alpha:STOP", "Alpha:START"}; strings.Join(m.sent, ",") != strings.Join(want, ",") {
+		t.Fatalf("calls = %v, want %v", m.sent, want)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"strings"
+	"syscall"
 	"testing"
 
 	"ansm/internal/cli"
@@ -33,6 +34,9 @@ type fakeManager struct {
 	written        []settingKey
 	processEntries map[string][]platform.ProcessEntry
 	processErrors  map[string]error
+	controlErr     error
+	controlCalls   []string
+	startCalls     int
 }
 
 func (m *fakeManager) InstallService(platform.InstallSpec) error           { return nil }
@@ -57,9 +61,14 @@ func (m *fakeManager) DeleteSetting(_ string, s settings.Setting, sub string) er
 	return nil
 }
 func (m *fakeManager) StartService(string, []string) (control.State, error) {
+	m.startCalls++
 	return control.Running, nil
 }
-func (m *fakeManager) SendControl(string, control.Code) (control.State, error) {
+func (m *fakeManager) SendControl(_ string, c control.Code) (control.State, error) {
+	m.controlCalls = append(m.controlCalls, c.Name())
+	if m.controlErr != nil {
+		return 0, m.controlErr
+	}
 	return control.Stopped, nil
 }
 func (m *fakeManager) ListServiceProcesses(service string) ([]platform.ProcessEntry, error) {
@@ -290,5 +299,38 @@ func TestEditDialogRetriesAccessDeniedWithElevation(t *testing.T) {
 	env.RunGUI = func(cli.Command, []string) int { return 3 }
 	if code := runNamed(t, env, "edit"); code != 0 {
 		t.Fatalf("code=%d", code)
+	}
+}
+
+// TestRestartStartsAServiceThatIsAlreadyStopped pins defect A: a stop that
+// fails only because the service is already stopped must not block restart's
+// start attempt.
+func TestRestartStartsAServiceThatIsAlreadyStopped(t *testing.T) {
+	m := managedFake()
+	m.controlErr = &platform.Error{Code: 1, Op: "control service", Err: platform.ErrServiceNotActive}
+	env, out, _ := commandEnv([]string{"ansm.exe", "restart", "MySvc"}, m)
+	if code := runNamed(t, env, "restart"); code != ExitSuccess {
+		t.Fatalf("code=%d", code)
+	}
+	if m.startCalls != 1 {
+		t.Fatalf("startCalls=%d, want 1", m.startCalls)
+	}
+	if out.String() == "" {
+		t.Fatal("expected the resulting state to be printed")
+	}
+}
+
+// TestRestartReportsAStopFailureThatIsNotAlreadyStopped pins the boundary of
+// the defect A fix: a stop failure for any other reason must still be
+// reported and must not be followed by a start attempt.
+func TestRestartReportsAStopFailureThatIsNotAlreadyStopped(t *testing.T) {
+	m := managedFake()
+	m.controlErr = &platform.Error{Code: 1, Op: "control service", Err: syscall.Errno(5)}
+	env, _, _ := commandEnv([]string{"ansm.exe", "restart", "MySvc"}, m)
+	if code := runNamed(t, env, "restart"); code == ExitSuccess {
+		t.Fatalf("code=%d, want a failure", code)
+	}
+	if m.startCalls != 0 {
+		t.Fatalf("startCalls=%d, want 0", m.startCalls)
 	}
 }

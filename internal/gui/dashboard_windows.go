@@ -110,11 +110,13 @@ var (
 // index can be turned back into a service name without reading text out of the
 // control.
 type dashboard struct {
-	runner *Runner
-	hwnd   uintptr
-	rows   []ServiceRow
-	all    bool
-	result int
+	runner    *Runner
+	hwnd      uintptr
+	rows      []ServiceRow
+	all       bool
+	result    int
+	iconBig   uintptr
+	iconSmall uintptr
 }
 
 // runDashboard opens the integrated window and returns when it closes.
@@ -132,6 +134,10 @@ func (r *Runner) runDashboard() int {
 	ret, _, e := procDialogBoxIndirectParamW.Call(h, uintptr(unsafe.Pointer(&tmpl[0])), 0, dashCallback, 0)
 	dashPending = nil
 	runtime.KeepAlive(tmpl)
+	// The window is destroyed by the time DialogBoxIndirectParamW returns, so
+	// this is the one place that covers every exit path for the icon handles.
+	destroyWindowIcons(d.iconBig, d.iconSmall)
+	d.iconBig, d.iconSmall = 0, 0
 	if ret == ^uintptr(0) {
 		messageBox(0, version.Product, fmt.Sprintf("Could not create dialog: %v", e), mbOK|mbIconError)
 		return 1
@@ -149,7 +155,7 @@ func dashboardProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		}
 		d.hwnd = hwnd
 		dashboards[hwnd] = d
-		setWindowIcon(hwnd)
+		d.iconBig, d.iconSmall = setWindowIcon(hwnd)
 		d.initDialog()
 		return 1
 	case wmNotify:
