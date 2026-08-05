@@ -21,10 +21,16 @@ import (
 
 // RunCommand follows the documented behavioral contract. See RunCommand, T3.
 func RunCommand(env Env, c cli.Command, argv []string) int {
-	args := argv[2:]
+	// argv can be just the executable path here: a bare invocation resolves
+	// straight to ModeManager/gui without a command word (see
+	// app.withoutCommand), so argv[2:] must not assume argv[1] exists.
+	var args []string
+	if len(argv) > 2 {
+		args = argv[2:]
+	}
 	if c.AlwaysGUI || (c.GUIWhenShort && len(args) < 2) {
 		if c.Elevation == cli.ElevateAlways && !env.Gateway.IsAdmin() {
-			writeLine(env.Stderr, fmt.Sprintf("Administrator access is needed to %s a service.", c.Name))
+			writeLine(env.Stderr, elevationNotice(c))
 			if err := env.Gateway.Elevate(argv); err != nil {
 				return commandError(env, "elevation", err, 100)
 			}
@@ -51,7 +57,7 @@ func RunCommand(env Env, c cli.Command, argv []string) int {
 	}
 
 	if c.Elevation == cli.ElevateAlways && !env.Gateway.IsAdmin() {
-		writeLine(env.Stderr, fmt.Sprintf("Administrator access is needed to %s a service.", c.Name))
+		writeLine(env.Stderr, elevationNotice(c))
 		if err := env.Gateway.Elevate(argv); err != nil {
 			return commandError(env, "elevation", err, 100)
 		}
@@ -89,6 +95,17 @@ func RunCommand(env Env, c cli.Command, argv []string) int {
 	}
 	return result
 }
+
+// elevationNotice explains the UAC prompt that is about to appear. The
+// integrated management window is not one named verb applied to one service,
+// so it does not fit the "<verb> a service" sentence the other commands use.
+func elevationNotice(c cli.Command) string {
+	if c.Name == cli.ManageCommand {
+		return "Administrator access is needed to manage services."
+	}
+	return fmt.Sprintf("Administrator access is needed to %s a service.", c.Name)
+}
+
 func processesCommand(env Env, services []string) int {
 	lister, ok := env.Manager.(platform.ProcessLister)
 	if !ok {

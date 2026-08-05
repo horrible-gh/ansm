@@ -63,6 +63,14 @@ func Run(env Env) int {
 		return ExitSuccess
 
 	case ModeManager:
+		// The management window never writes to stdout/stderr, so a console
+		// Windows allocated only for this process (see
+		// platform.Gateway.HideConsoleWindow) is just visual noise; the bare
+		// invocation R0001 routes here is usually a double-click that had no
+		// console at all until CreateProcess added one.
+		if decision.Command.Name == cli.ManageCommand {
+			env.Gateway.HideConsoleWindow()
+		}
 		return env.RunCommand(decision.Command, env.Argv)
 
 	case ModeService:

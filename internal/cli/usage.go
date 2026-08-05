@@ -11,15 +11,21 @@ import (
 const usageTemplate = `ANSM: The non-sucking service manager (NSSM-compatible)
 Version %[2]s
 
-Usage: %[1]s <option> [<args> ...]
+Usage: %[1]s [<option> [<args> ...]]
+
+To open the integrated service manager, which lists every service and can
+install, edit, remove, start, stop, restart, pause, continue and rotate them
+from one window, run %[1]s with no arguments at all, or:
+
+	%[1]s gui
+
+To show this help instead:
+
+	%[1]s help
 
 To show service installation GUI:
 
 	%[1]s install [<servicename>]
-
-To show the installation GUI directly, without the install verb:
-
-	%[1]s gui
 
 To install a service without confirmation:
 

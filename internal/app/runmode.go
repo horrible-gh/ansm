@@ -39,6 +39,9 @@ func ResolveMode(argv []string, hasStdin stdinProbe, connect dispatcher) Decisio
 		if cli.IsVersionFlag(argv[1]) {
 			return Decision{Mode: ModeVersion}
 		}
+		if cli.IsHelpFlag(argv[1]) {
+			return Decision{Mode: ModeUsage}
+		}
 		if c, ok := cli.Lookup(argv[1]); ok {
 			return Decision{Mode: ModeManager, Command: c}
 		}
@@ -49,11 +52,28 @@ func ResolveMode(argv []string, hasStdin stdinProbe, connect dispatcher) Decisio
 		case platform.DispatchServed:
 			return Decision{Mode: ModeService}
 		case platform.DispatchNotAService:
-			return Decision{Mode: ModeUsage}
+			return withoutCommand(argv)
 		default:
 			return Decision{Mode: ModeDispatchError}
 		}
 	}
 
-	return Decision{Mode: ModeUsage}
+	return withoutCommand(argv)
+}
+
+// withoutCommand decides what a run that reached the SCM probe should do next.
+// Per R0001 an invocation carrying no command word at all opens the integrated
+// management window, so double-clicking the executable and typing a bare `ansm`
+// both land on the same screen instead of a usage message box or usage text.
+// A word that got here is one Lookup rejected, so it still gets usage; callers
+// who want that text deliberately use `ansm help`.
+func withoutCommand(argv []string) Decision {
+	if len(argv) > 1 {
+		return Decision{Mode: ModeUsage}
+	}
+	c, ok := cli.Lookup(cli.ManageCommand)
+	if !ok {
+		return Decision{Mode: ModeUsage}
+	}
+	return Decision{Mode: ModeManager, Command: c}
 }

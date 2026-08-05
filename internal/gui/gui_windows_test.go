@@ -96,3 +96,50 @@ func templateHasControlID(tmpl []byte, id uint16) bool {
 	binary.LittleEndian.PutUint16(want, id)
 	return bytes.Contains(tmpl, want)
 }
+
+// TestDashboardTemplateCarriesEveryEntryPoint guards the integrated window
+// required by R0001: every command the user can no longer reach by typing a
+// separate verb must have a control in this one template.
+func TestDashboardTemplateCarriesEveryEntryPoint(t *testing.T) {
+	tmpl := dashboardTemplate()
+	if !containsUTF16String(tmpl, "SysListView32") {
+		t.Fatal("dashboard has no service list")
+	}
+	if !containsUTF16String(tmpl, "ANSM service manager") {
+		t.Fatal("dashboard title does not carry the product name")
+	}
+	for _, id := range []uint16{idDashList, idDashInstall, idDashEdit, idDashRemove, idDashRefresh, idDashShowAll, idDashStatus, idCancelButton} {
+		if !templateHasControlID(tmpl, id) {
+			t.Errorf("dashboard is missing control %d", id)
+		}
+	}
+	for i, a := range Actions {
+		if !templateHasControlID(tmpl, uint16(idDashAction+i)) {
+			t.Errorf("dashboard is missing the %s button", a.Label())
+		}
+		if !containsUTF16String(tmpl, a.Label()) {
+			t.Errorf("dashboard has no %s caption", a.Label())
+		}
+	}
+}
+
+// TestDashboardControlIDsDoNotCollideWithTheForms keeps the dashboard's IDs
+// clear of the form pages: the two templates share one WM_COMMAND vocabulary
+// only through the deliberately reused IDCANCEL.
+func TestDashboardControlIDsDoNotCollideWithTheForms(t *testing.T) {
+	dashIDs := []int{idDashList, idDashInstall, idDashEdit, idDashRemove, idDashRefresh, idDashShowAll, idDashStatus}
+	for i := range Actions {
+		dashIDs = append(dashIDs, idDashAction+i)
+	}
+	formIDs := map[int]bool{idTab: true, idName: true, idSave: true, idCancelButton: true, idApplication: true, idDirectory: true, idArguments: true, idHookName: true, idHookCommand: true, idApplicationBrowse: true, idDirectoryBrowse: true, idStdinBrowse: true, idStdoutBrowse: true, idStderrBrowse: true, idHookCommandBrowse: true}
+	seen := map[int]bool{}
+	for _, id := range dashIDs {
+		if formIDs[id] {
+			t.Errorf("dashboard control %d collides with a form control", id)
+		}
+		if seen[id] {
+			t.Errorf("dashboard control %d is used twice", id)
+		}
+		seen[id] = true
+	}
+}
