@@ -3,6 +3,7 @@ package platform
 
 import (
 	"errors"
+	"syscall"
 	"time"
 
 	"ansm/internal/control"
@@ -12,6 +13,15 @@ import (
 
 // ErrNotImplemented follows the documented behavioral contract. See ErrNotImplemented.
 var ErrNotImplemented = errors.New("not implemented in this stage")
+
+// ErrServiceNotActive is the SCM's ERROR_SERVICE_NOT_ACTIVE (1062): the
+// control could not be delivered because the service is not running. Callers
+// that only need the service to end up stopped treat it as success.
+const ErrServiceNotActive = syscall.Errno(1062)
+
+// IsServiceNotActive reports whether err is, or wraps, ErrServiceNotActive.
+// SendControl wraps the raw errno in *Error, so the unwrapping matters.
+func IsServiceNotActive(err error) bool { return errors.Is(err, ErrServiceNotActive) }
 
 // DispatchResult follows the documented behavioral contract. See DispatchResult, L0008 2.1.
 type DispatchResult int

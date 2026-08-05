@@ -55,13 +55,14 @@ func (a Action) Label() string {
 // command makes (see app.controlCommand), including restart being a stop
 // followed by a start rather than an SCM control code of its own. Routing both
 // front ends through one definition keeps `ansm restart` and the window's
-// Restart button from drifting apart.
+// Restart button from drifting apart. A stop that fails only because the
+// service is already stopped does not block the start.
 func Control(manager platform.Manager, a Action, service string) (control.State, error) {
 	switch a {
 	case ActionStart:
 		return manager.StartService(service, nil)
 	case ActionRestart:
-		if _, err := manager.SendControl(service, control.Stop); err != nil {
+		if _, err := manager.SendControl(service, control.Stop); err != nil && !platform.IsServiceNotActive(err) {
 			return 0, err
 		}
 		return manager.StartService(service, nil)
