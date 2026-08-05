@@ -30,7 +30,8 @@ var (
 	procCheckTokenMembership        = advapi32.NewProc("CheckTokenMembership")
 	procFreeSid                     = advapi32.NewProc("FreeSid")
 
-	procGetStdHandle = kernel32.NewProc("GetStdHandle")
+	procGetStdHandle          = kernel32.NewProc("GetStdHandle")
+	procGetConsoleProcessList = kernel32.NewProc("GetConsoleProcessList")
 
 	procMessageBoxW   = user32.NewProc("MessageBoxW")
 	procShellExecuteW = shell32.NewProc("ShellExecuteW")
@@ -59,6 +60,21 @@ func (Windows) StdinHandlePresent() bool {
 // HasConsoleOutput follows the documented behavioral contract. See HasConsoleOutput.
 func (Windows) HasConsoleOutput() bool {
 	return handlePresent(stdHandle(stdOutputHandle)) || handlePresent(stdHandle(stdErrorHandle))
+}
+
+// HideConsoleWindow releases the console CreateProcess implicitly allocated
+// for this CUI-subsystem executable when GetConsoleProcessList reports this
+// process as the console's only owner. A console shared with an interactive
+// parent shell reports more than one attached process, so that case is left
+// untouched: freeing it would also pull the console out from under the
+// parent shell.
+func (Windows) HideConsoleWindow() {
+	var pid uint32
+	n, _, _ := procGetConsoleProcessList.Call(uintptr(unsafe.Pointer(&pid)), 1)
+	if n != 1 {
+		return
+	}
+	procFreeConsole.Call()
 }
 
 // pendingServiceMain follows the documented behavioral contract. See SCM, StartServiceCtrlDispatcherW.

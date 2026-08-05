@@ -1,9 +1,12 @@
 # T9 native configuration dialogs
 
 T9 completes the management UI promised by D0006. `install` without an application,
-`edit`, and `remove` without `confirm` now open native modal Windows dialogs. The `gui`
-command is a discoverable alias for the same no-argument `install` dialog, for callers
-who want to open the configuration UI without implying that a service is being installed.
+`edit`, and `remove` without `confirm` now open native modal Windows dialogs.
+
+R0001 replaced what `gui` used to mean. It was a discoverable alias for the same
+no-argument `install` dialog; it now opens the integrated service manager described
+under "Integrated management window" below, and a run with no arguments at all resolves
+to it. The individual verbs are unchanged, so scripts and muscle memory still work.
 
 ## Implementation
 
@@ -83,6 +86,41 @@ had a way to browse for a file or folder.
   are plain English literals for now; wiring them to the existing but unused
   `NSSM_GUI_BROWSE_*` catalog entries is left for a later pass.
 
+## Integrated management window
+
+R0001 reported two things: running the executable showed either nothing useful or the
+usage text, and the service operations were split across `install`, `edit`, `remove` and
+the control verbs. NR0003 traced both to missing pieces rather than to broken ones --
+`ResolveMode` had no route from "no command word" to the GUI, and the GUI had only the
+three single-service modal forms. `platform.Manager` already exposed everything a
+combined screen needs.
+
+- **Entry point.** `app.withoutCommand` sends an invocation carrying no command word to
+  `cli.ManageCommand` (`gui`). It applies on both sides of the SCM probe, so a
+  double-clicked executable and a bare `ansm` typed at a prompt reach the same screen;
+  a service started by the SCM still resolves to `ModeService` first, and an
+  unrecognized command word still gets the usage text. Because a bare run no longer
+  prints usage, `cli.IsHelpFlag` accepts `help`, `--help`, `/?` and their variants.
+- **The window.** `gui.dashboard` is a report-mode `SysListView32` listing every service
+  with its state, start type, whether this tool manages it, and the application it runs
+  (the supervised program for managed services, the image path otherwise). Beneath it
+  are Install, Edit and Remove, the six control verbs `start`/`stop`/`restart`/`pause`/
+  `continue`/`rotate`, a Refresh button, and a checkbox that widens the list to services
+  this tool does not manage -- the same distinction `ansm list all` draws.
+- **Reuse, not reimplementation.** Install, Edit and Remove open the existing `Form`
+  dialogs as modal children, so validation, rollback and the unchanged-account rule are
+  unchanged. `gui.Control` issues the same `Manager` calls as `app.controlCommand`,
+  including restart being a stop followed by a start, so the two front ends cannot drift.
+- **Two Win32 details worth keeping in mind.** `session.showOwned` exists so the child
+  forms are owned by the dashboard; an unowned modal would leave both windows clickable.
+  And the dashboard deliberately does not take `dialogMu`: the child forms take it
+  themselves, and a `sync.Mutex` is not reentrant, so holding it across the dashboard's
+  lifetime would deadlock the first time a user pressed Install.
+- **Selection state.** A service that cannot be queried still gets a row carrying the
+  reason, since hiding it would misrepresent the machine. The list refreshes after every
+  action and restores the selection by name, because row indices move as services appear
+  and disappear.
+
 ## Verification
 
 The pure form tests cover tab order, install persistence and rollback, unchanged account
@@ -91,3 +129,9 @@ each generated template and assert that both package-level callbacks exist, that
 main dialog title carries the current product name instead of a hardcoded string, and
 that each of the six path fields' browse button control IDs are present in its page
 template.
+
+For the integrated window, `dashboard_test.go` covers the parts that do not need a
+window: list ordering, how each service is described, that an unreadable service keeps
+its row, and that every action maps to the control code its CLI counterpart sends. The
+Windows-only tests assert that the template carries a list view and a control for every
+entry point, and that the dashboard's IDs do not collide with the form pages'.

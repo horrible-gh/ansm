@@ -30,6 +30,12 @@ type Gateway interface {
 	HasConsoleOutput() bool
 	ShowMessageBox(title, body string)
 	Elevate(argv []string) error
+	// HideConsoleWindow releases the console window Windows implicitly
+	// allocated for this process, but only when nothing else is attached to
+	// it (a bare double-click, a shortcut, or Task Scheduler). A console
+	// inherited from an interactive parent such as cmd.exe or PowerShell is
+	// left alone.
+	HideConsoleWindow()
 }
 
 // ServiceMain follows the documented behavioral contract. See ServiceMain, SCM.

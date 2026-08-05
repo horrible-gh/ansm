@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"ansm/internal/cli"
 	"ansm/internal/platform"
 )
 
@@ -48,12 +49,15 @@ func TestNoArgsAndNoStdinBecomesService(t *testing.T) {
 	}
 }
 
+// TestStdinPresentNeverTriesDispatcher pins the two independent facts about a
+// bare console run: it must not touch the SCM, and per R0001 it now opens the
+// integrated management window instead of printing the usage text.
 func TestStdinPresentNeverTriesDispatcher(t *testing.T) {
 	// This section follows the documented behavioral contract. See L0008 2.1, Windows.
 	connect, calls := connectsTo(platform.DispatchServed)
 	got := ResolveMode([]string{"ansm.exe"}, probe(true), connect)
-	if got.Mode != ModeUsage {
-		t.Errorf("Mode = %v, want ModeUsage", got.Mode)
+	if got.Mode != ModeManager || got.Command.Name != cli.ManageCommand {
+		t.Errorf("Mode = %v, Command = %q, want ModeManager/%s", got.Mode, got.Command.Name, cli.ManageCommand)
 	}
 	if *calls != 0 {
 		t.Errorf("dispatcher called %d times, want 0", *calls)
@@ -61,15 +65,32 @@ func TestStdinPresentNeverTriesDispatcher(t *testing.T) {
 }
 
 func TestDispatchFailureCodes(t *testing.T) {
-	// This section follows the documented behavioral contract.
+	// A double-clicked executable is not an SCM child, so the dispatcher
+	// refuses it; that is the GUI entry point, not an error. See R0001.
 	connect, _ := connectsTo(platform.DispatchNotAService)
-	if got := ResolveMode([]string{"ansm.exe"}, probe(false), connect); got.Mode != ModeUsage {
-		t.Errorf("Mode = %v, want ModeUsage", got.Mode)
+	got := ResolveMode([]string{"ansm.exe"}, probe(false), connect)
+	if got.Mode != ModeManager || got.Command.Name != cli.ManageCommand {
+		t.Errorf("Mode = %v, Command = %q, want ModeManager/%s", got.Mode, got.Command.Name, cli.ManageCommand)
 	}
 	// This section follows the documented behavioral contract.
 	connect, _ = connectsTo(platform.DispatchFailed)
 	if got := ResolveMode([]string{"ansm.exe"}, probe(false), connect); got.Mode != ModeDispatchError {
 		t.Errorf("Mode = %v, want ModeDispatchError", got.Mode)
+	}
+}
+
+// TestHelpFlagKeepsUsageReachable guards the escape hatch that R0001 leaves
+// behind: a bare run no longer prints usage, so an explicit help request must.
+func TestHelpFlagKeepsUsageReachable(t *testing.T) {
+	for _, flag := range []string{"help", "--help", "-h", "/?"} {
+		connect, calls := connectsTo(platform.DispatchServed)
+		got := ResolveMode([]string{"ansm.exe", flag}, probe(false), connect)
+		if got.Mode != ModeUsage {
+			t.Errorf("ResolveMode(%q).Mode = %v, want ModeUsage", flag, got.Mode)
+		}
+		if *calls != 0 {
+			t.Errorf("%q: dispatcher called %d times, want 0", flag, *calls)
+		}
 	}
 }
 

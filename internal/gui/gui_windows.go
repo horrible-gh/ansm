@@ -182,7 +182,12 @@ func (r *Runner) Run(command string, args []string) int {
 	var f *Form
 	var err error
 	switch strings.ToLower(command) {
-	case "install", "gui":
+	case "gui":
+		// R0001: the gui verb is no longer an alias for an empty install
+		// form. It opens the integrated window, which reaches install, edit,
+		// remove and the control verbs from one list of services.
+		return r.runDashboard()
+	case "install":
 		name := ""
 		if len(args) > 0 {
 			name = args[0]
@@ -220,14 +225,19 @@ type session struct {
 	selectedHook string
 }
 
-func (s *session) show() int {
+func (s *session) show() int { return s.showOwned(0) }
+
+// showOwned runs the dialog modally, owned by owner. The dashboard passes its
+// own window so Windows disables it for the duration; command-line entry
+// points pass 0, which is the unowned top-level dialog they have always been.
+func (s *session) showOwned(owner uintptr) int {
 	dialogMu.Lock()
 	defer dialogMu.Unlock()
 	initControls()
 	tmpl := mainTemplate(s.form.Mode)
 	pending = s
 	h, _, _ := procGetModuleHandleW.Call(0)
-	ret, _, e := procDialogBoxIndirectParamW.Call(h, uintptr(unsafe.Pointer(&tmpl[0])), 0, mainCallback, 0)
+	ret, _, e := procDialogBoxIndirectParamW.Call(h, uintptr(unsafe.Pointer(&tmpl[0])), owner, mainCallback, 0)
 	pending = nil
 	runtime.KeepAlive(tmpl)
 	if ret == ^uintptr(0) {
@@ -238,7 +248,9 @@ func (s *session) show() int {
 }
 
 func initControls() {
-	data := [2]uint32{8, 0x00000008}
+	// Tab classes for the form pages, list view classes for the dashboard's
+	// service list. Registering both here keeps every entry point one call.
+	data := [2]uint32{8, iccTabClasses | iccListViewClasses}
 	procInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&data[0])))
 }
 
@@ -313,6 +325,7 @@ func mainDialogProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 				return 1
 			case idCancelButton:
 				s.result = 0
+				delete(sessions, hwnd)
 				procEndDialog.Call(hwnd, 0)
 				return 1
 			case idApplicationBrowse:

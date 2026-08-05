@@ -31,12 +31,17 @@ type Command struct {
 	Usage string
 }
 
+// ManageCommand is the command that opens the integrated management window.
+// A run with no command word at all resolves to it (see app.ResolveMode), so
+// the name lives here rather than being spelled out at each use site.
+const ManageCommand = "gui"
+
 // commands follows the documented behavioral contract. See P0007.
 var commands = []Command{
 	{Name: "install", MinArgs: 0, Elevation: ElevateAlways, GUIWhenShort: true, Usage: "install [<servicename>] [<app> [<args> ...]]"},
 	{Name: "remove", MinArgs: 0, Elevation: ElevateAlways, GUIWhenShort: true, Usage: "remove [<servicename> [confirm]]"},
 	{Name: "edit", MinArgs: 1, Elevation: ElevateOnAccessDenied, AlwaysGUI: true, Usage: "edit <servicename>"},
-	{Name: "gui", MinArgs: 0, Elevation: ElevateAlways, AlwaysGUI: true, Usage: "gui"},
+	{Name: ManageCommand, MinArgs: 0, Elevation: ElevateAlways, AlwaysGUI: true, Usage: "gui"},
 	{Name: "get", MinArgs: 2, Elevation: ElevateOnAccessDenied, Usage: "get <servicename> <parameter> [<subparameter>]"},
 	{Name: "set", MinArgs: 3, Elevation: ElevateOnAccessDenied, Usage: "set <servicename> <parameter> [<subparameter>] <value>"},
 	{Name: "reset", MinArgs: 2, Elevation: ElevateOnAccessDenied, Usage: "reset <servicename> <parameter> [<subparameter>]"},
@@ -89,6 +94,30 @@ func IsVersionFlag(s string) bool {
 	}
 	// return follows the documented behavioral contract.
 	return prefixed && strings.EqualFold(rest, "v")
+}
+
+// IsHelpFlag recognizes an explicit request for the usage text. A bare run now
+// opens the management window instead of printing usage (R0001), so console
+// users need a way to ask for it: help, --help, /?, and the usual variants.
+// Like IsVersionFlag it refuses the bare short forms, so a future "h" command
+// could not be shadowed by an accidental abbreviation.
+func IsHelpFlag(s string) bool {
+	rest := s
+	prefixed := false
+	switch {
+	case strings.HasPrefix(rest, "/"):
+		rest, prefixed = rest[1:], true
+	case strings.HasPrefix(rest, "-"):
+		rest, prefixed = rest[1:], true
+		if strings.HasPrefix(rest, "-") {
+			rest = rest[1:]
+		}
+	}
+	if strings.EqualFold(rest, "help") {
+		return true
+	}
+	// return follows the documented behavioral contract.
+	return prefixed && (strings.EqualFold(rest, "h") || rest == "?")
 }
 
 // ShouldElevate retries access-denied edit commands only for exactly executable, command, and service arguments; extra arguments may contain secrets and are never forwarded to an elevated process.

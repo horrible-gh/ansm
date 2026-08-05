@@ -22,6 +22,7 @@ func (g commandGateway) IsAdmin() bool                 { return g.admin }
 func (g commandGateway) HasConsoleOutput() bool        { return true }
 func (g commandGateway) ShowMessageBox(string, string) {}
 func (g commandGateway) Elevate([]string) error        { return nil }
+func (g commandGateway) HideConsoleWindow()            {}
 
 type settingKey struct{ name, sub string }
 type fakeManager struct {
@@ -237,6 +238,30 @@ func TestGuiCommandOpensInstallDialog(t *testing.T) {
 		return 37
 	}
 	if code := runNamed(t, env, "gui"); code != 37 {
+		t.Fatalf("code=%d", code)
+	}
+	if !called {
+		t.Fatal("gui dialog was not called")
+	}
+}
+
+// TestBareArgvOpensGUIWithoutPanicking pins the exact crash from R0001's bare
+// invocation: withoutCommand resolves argv=["ansm.exe"] (no command word) to
+// ModeManager/gui, so RunCommand must accept an argv shorter than 2 elements
+// instead of panicking on argv[2:].
+func TestBareArgvOpensGUIWithoutPanicking(t *testing.T) {
+	m := managedFake()
+	env, _, _ := commandEnv([]string{"ansm.exe"}, m)
+	called := false
+	env.RunGUI = func(c cli.Command, args []string) int {
+		called = c.Name == "gui" && len(args) == 0
+		return 37
+	}
+	c, ok := cli.Lookup(cli.ManageCommand)
+	if !ok {
+		t.Fatal(cli.ManageCommand)
+	}
+	if code := RunCommand(env, c, env.Argv); code != 37 {
 		t.Fatalf("code=%d", code)
 	}
 	if !called {

@@ -124,3 +124,31 @@ func TestUsageUsesExeNameAndCRLF(t *testing.T) {
 		}
 	}
 }
+
+// TestIsHelpFlag covers the escape hatch R0001 needs: a bare run now opens the
+// window, so usage has to be reachable some other way.
+func TestIsHelpFlag(t *testing.T) {
+	for _, s := range []string{"help", "HELP", "/help", "-help", "--help", "-h", "-H", "/h", "/?", "-?"} {
+		if !IsHelpFlag(s) {
+			t.Errorf("IsHelpFlag(%q) = false, want true", s)
+		}
+	}
+	// for follows the documented behavioral contract.
+	for _, s := range []string{"h", "?", "helper", "install", ""} {
+		if IsHelpFlag(s) {
+			t.Errorf("IsHelpFlag(%q) = true, want false", s)
+		}
+	}
+}
+
+// TestUsageDocumentsTheBareInvocation keeps the usage text honest about the
+// behavior change: running with no arguments opens the integrated window.
+func TestUsageDocumentsTheBareInvocation(t *testing.T) {
+	text := Usage("myansm")
+	if !strings.Contains(text, "no arguments") {
+		t.Errorf("usage does not explain what a bare run does:\n%s", text)
+	}
+	if !strings.Contains(text, "myansm help") {
+		t.Errorf("usage does not mention how to ask for help:\n%s", text)
+	}
+}
