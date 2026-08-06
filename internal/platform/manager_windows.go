@@ -436,7 +436,7 @@ func (w Windows) WriteSetting(service string, setting settings.Setting, sub stri
 		if cfg.Type&0x100 != 0 && !strings.EqualFold(value.Text, "LocalSystem") {
 			return errors.New("interactive services must use LocalSystem")
 		}
-		if !specialServiceAccount(service, value.Text) {
+		if !SpecialServiceAccount(service, value.Text) {
 			if password == "" {
 				return errors.New("password is required for this account")
 			}

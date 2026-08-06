@@ -167,10 +167,7 @@ func (f *Form) Validate() error {
 		}
 	}
 	account := f.Text("ObjectName")
-	special := strings.EqualFold(account, "LocalSystem") ||
-		strings.EqualFold(account, `NT Authority\LocalService`) ||
-		strings.EqualFold(account, `NT Authority\NetworkService`) ||
-		strings.HasPrefix(strings.ToLower(account), `nt service\`)
+	special := platform.SpecialServiceAccount(f.Name, account)
 	if account != "" && !special {
 		unchanged := f.Mode == Edit && strings.EqualFold(account, f.Original[Key{Name: "ObjectName"}].Text)
 		if (!unchanged || f.Password != "" || f.Confirm != "") && (f.Password == "" || f.Password != f.Confirm) {
