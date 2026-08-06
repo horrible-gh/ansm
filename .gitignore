@@ -1,3 +1,6 @@
+# Legacy Program (nssm)
+.legacy
+
 # Build artifacts
 /ansm
 /ansm.exe
