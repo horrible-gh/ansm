@@ -380,7 +380,7 @@ func utf16Ptr(s string) *uint16 {
 // dashboardTemplate builds the integrated window: a report-mode list of every
 // service, with the create/update/delete forms and the control verbs beneath.
 func dashboardTemplate() []byte {
-	b := newDialog(wsPopup|wsCaption|wsSysMenu|dsModalFrame|dsSetFont, 0, 0, 560, 272, version.Product+" service manager")
+	b := newDialog(wsPopup|wsCaption|wsSysMenu|wsMinimizeBox|dsModalFrame|dsSetFont, 0, 0, 560, 272, version.Product+" service manager")
 	b.itemClass(wsChild|wsVisible|wsTabStop|lvsReport|lvsSingleSel|lvsShowSelAlways, wsExClientEdge, 7, 7, 546, 196, idDashList, "SysListView32", "")
 	pushButton(b, idDashInstall, "Install...", 7, 209, 60, 14)
 	pushButton(b, idDashEdit, "Edit...", 71, 209, 60, 14)
