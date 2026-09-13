@@ -143,3 +143,14 @@ func TestDashboardControlIDsDoNotCollideWithTheForms(t *testing.T) {
 		seen[id] = true
 	}
 }
+
+func TestDashboardTemplateMinimizeBoxScope(t *testing.T) {
+	if style := binary.LittleEndian.Uint32(dashboardTemplate()[:4]); style&wsMinimizeBox == 0 {
+		t.Fatalf("dashboard style %#x does not include wsMinimizeBox", style)
+	}
+	for _, mode := range []Mode{Install, Edit, Remove} {
+		if style := binary.LittleEndian.Uint32(mainTemplate(mode)[:4]); style&wsMinimizeBox != 0 {
+			t.Fatalf("mode %v style %#x unexpectedly includes wsMinimizeBox", mode, style)
+		}
+	}
+}

@@ -48,6 +48,7 @@ const (
 	wsVisible                   = 0x10000000
 	wsCaption                   = 0x00c00000
 	wsSysMenu                   = 0x00080000
+	wsMinimizeBox               = 0x00020000
 	wsTabStop                   = 0x00010000
 	wsBorder                    = 0x00800000
 	dsModalFrame                = 0x80
