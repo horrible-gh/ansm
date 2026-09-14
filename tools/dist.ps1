@@ -44,9 +44,39 @@ $root = Split-Path -Parent $PSScriptRoot
 Push-Location $root
 try {
   function Invoke-Git([string[]]$GitArgs) {
-    $output = & git @GitArgs 2>$null
-    if ($LASTEXITCODE -ne 0) { return $null }
-    return ($output | Select-Object -First 1)
+    # Windows PowerShell 5.1 can turn stderr from a native command into a terminating
+    # NativeCommandError while $ErrorActionPreference='Stop', before $LASTEXITCODE can
+    # be inspected. PowerShell 7.3+ can do the same when
+    # $PSNativeCommandUseErrorActionPreference is enabled. Keep git's stdout/stderr
+    # outside the PowerShell native pipeline so both hosts follow the same contract:
+    # non-zero exit => metadata unavailable => caller falls back to source defaults.
+    $stdoutPath = [System.IO.Path]::GetTempFileName()
+    $stderrPath = [System.IO.Path]::GetTempFileName()
+    try {
+      try {
+        $process = Start-Process `
+          -FilePath "git" `
+          -ArgumentList $GitArgs `
+          -NoNewWindow `
+          -Wait `
+          -PassThru `
+          -RedirectStandardOutput $stdoutPath `
+          -RedirectStandardError $stderrPath
+      }
+      catch {
+        return $null
+      }
+
+      if ($process.ExitCode -ne 0) { return $null }
+
+      $output = Get-Content -LiteralPath $stdoutPath -ErrorAction Stop |
+        Select-Object -First 1
+      if ($null -eq $output) { return $null }
+      return $output
+    }
+    finally {
+      Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    }
   }
 
   if (-not $Version) {
@@ -63,7 +93,7 @@ try {
   if ($Date) { $ldflags += "-X", "ansm/internal/version.BuildDate=$Date" }
 
   if ($Version) {
-    # Keep the resource version and nsm version output identical.
+    # Keep the resource version and ansm version output identical.
     $mkrsrc = @("run", "./tools/mkrsrc")
     if ($Date) { $mkrsrc += "-date", $Date }
     $mkrsrc += "-version", $Version, "-icon", "resources/nssm.ico"
@@ -98,5 +128,6 @@ try {
   }
 }
 finally {
+  Remove-Item Env:GOOS, Env:GOARCH -ErrorAction SilentlyContinue
   Pop-Location
 }

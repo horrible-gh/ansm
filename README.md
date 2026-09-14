@@ -23,13 +23,21 @@ Regenerate resources only after changing `resources/messages.mc` or the icon:
 go generate ./cmd/ansm
 ```
 
-Build reproducible 64-bit and 32-bit distribution artifacts with:
+Build reproducible 64-bit and 32-bit distribution artifacts with PowerShell 7:
 
 ```text
 pwsh tools\dist.ps1
 ```
 
-This single command already covers the full pipeline: it regenerates the versioned resource objects, builds both `amd64` and `386` executables, and reports their SHA-256 hashes. No separate `go build` or `go generate` step is needed. The distribution script derives the version and build date from repository history and injects them through linker flags, so repeated builds of the same commit produce identical bytes.
+If PowerShell 7 is not installed, or `pwsh` cannot be launched because the Windows App Execution Alias resolves to an unusable stub, use the Windows PowerShell 5.1 path instead:
+
+```text
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\dist.ps1
+```
+
+Git should be installed so the distribution script can derive version metadata from repository history. If no tag is reachable (for example, in a tagless repository or a shallow clone), `git describe` is allowed to fail and the build continues with the source-snapshot default version. The HEAD commit date is still used when available.
+
+The distribution command covers the full pipeline: it regenerates the versioned resource objects when a Git-derived or explicit version is available, builds both `amd64` and `386` executables, and reports their SHA-256 hashes. No separate `go build` or `go generate` step is needed. When repository metadata is available, the script derives the version and build date from repository history and injects them through linker flags, so repeated builds of the same commit produce identical bytes.
 
 ## Repository layout
 
